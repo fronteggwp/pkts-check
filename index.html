@@ -1,0 +1,2587 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Перепроверка ПКТС 2.0</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%233559e0'/%3E%3Cpath d='M9 16.5l4.5 4.5L23 11.5' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script>
+  // ===== НАСТРОЙКА ПОДКЛЮЧЕНИЯ =====
+  // Supabase -> Project Settings -> API: «Project URL» и ключ «anon public».
+  // Если оставить пустыми — сайт работает в демо-режиме (данные только в браузере).
+  window.PKTS_CONFIG = {
+    supabaseUrl: "https://zydncwntavngzydifmrd.supabase.co",
+    supabaseAnonKey: "sb_publishable_8XWH-rCllbRiZrymYq4uwg__qmJs-fT"
+  };
+</script>
+<style>
+:root {
+  --bg: #f5f6fa;
+  --bg-grad: radial-gradient(1200px 500px at 10% -10%, #e9edff 0%, transparent 60%), radial-gradient(900px 400px at 100% 0%, #eef7f3 0%, transparent 55%);
+  --surface: #ffffff;
+  --surface-2: #f4f6fb;
+  --surface-3: #e9edf5;
+  --border: #e3e7ef;
+  --border-strong: #cfd6e3;
+  --text: #121a2c;
+  --muted: #5f6b82;
+  --faint: #98a2b5;
+  --accent: #4255ff;
+  --accent-2: #6b5cff;
+  --accent-soft: #eceffe;
+  --accent-text: #3343e0;
+  --ok: #16a362;
+  --ok-soft: #e4f6ed;
+  --err: #e0403f;
+  --err-soft: #fdeaea;
+  --int: #e08a00;
+  --int-soft: #fff2db;
+  --pend: #8e98ab;
+  --pend-soft: #eff1f5;
+  --noi: #b9c1cf;
+  --rev: #2f6bff;
+  --rev-soft: #e7efff;
+  --issue: #9a3fe0;
+  --issue-soft: #f3e9fd;
+  --shadow-sm: 0 1px 2px rgba(18, 26, 44, .05);
+  --shadow: 0 1px 2px rgba(18, 26, 44, .04), 0 8px 24px -8px rgba(18, 26, 44, .10);
+  --shadow-lg: 0 24px 64px -16px rgba(18, 26, 44, .28);
+  --radius: 16px;
+  --font: "Inter", "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --bg: #0c111c;
+  --bg-grad: radial-gradient(1100px 500px at 0% -10%, #18214a 0%, transparent 60%), radial-gradient(900px 400px at 100% 0%, #10302a 0%, transparent 55%);
+  --surface: #141b29;
+  --surface-2: #1a2232;
+  --surface-3: #232d41;
+  --border: #253046;
+  --border-strong: #34405a;
+  --text: #e8ecf5;
+  --muted: #9ba7bd;
+  --faint: #66728a;
+  --accent: #6f7dff;
+  --accent-2: #9a87ff;
+  --accent-soft: #1f2650;
+  --accent-text: #a3adff;
+  --ok: #3cc683;
+  --ok-soft: #12302a;
+  --err: #ff6a6a;
+  --err-soft: #3a1c22;
+  --int: #f2a93b;
+  --int-soft: #3a2c14;
+  --pend: #7f8aa0;
+  --pend-soft: #1e2636;
+  --noi: #48536a;
+  --rev: #6d9bff;
+  --rev-soft: #1b2a4d;
+  --issue: #c389f5;
+  --issue-soft: #2e2142;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .35);
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 10px 28px -10px rgba(0, 0, 0, .55);
+  --shadow-lg: 0 24px 70px -12px rgba(0, 0, 0, .7);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg) var(--bg-grad) no-repeat fixed;
+  color: var(--text);
+  font: 14px/1.5 var(--font);
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+a { color: var(--accent-text); text-decoration: none; }
+a:hover { text-decoration: underline; }
+button, input, select, textarea { font: inherit; color: inherit; }
+.mono { font-family: var(--mono); font-size: 12.5px; }
+.muted { color: var(--muted); }
+.faint { color: var(--faint); }
+.nowrap { white-space: nowrap; }
+.right { text-align: right; }
+.hidden { display: none !important; }
+.num-t { font-variant-numeric: tabular-nums; }
+kbd { font-family: var(--mono); font-size: 11px; padding: 1px 5px; border-radius: 5px; border: 1px solid var(--border-strong); border-bottom-width: 2px; background: var(--surface); color: var(--muted); }
+
+/* ---------- кнопки, поля */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  padding: 8px 14px; border-radius: 10px; cursor: pointer; font-weight: 550; white-space: nowrap;
+  transition: background .15s, border-color .15s, box-shadow .15s, transform .05s;
+  box-shadow: var(--shadow-sm);
+}
+.btn:hover { background: var(--surface-2); border-color: var(--border-strong); }
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: .5; cursor: default; transform: none; }
+.btn.primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); border-color: transparent; color: #fff; box-shadow: 0 6px 16px -6px color-mix(in srgb, var(--accent) 70%, transparent); }
+.btn.primary:hover { filter: brightness(1.06); }
+.btn.ghost { border-color: transparent; background: transparent; box-shadow: none; }
+.btn.ghost:hover { background: var(--surface-2); }
+.btn.danger:hover { color: var(--err); border-color: var(--err); }
+.btn.small { padding: 5px 10px; font-size: 13px; border-radius: 9px; }
+.btn.icon { padding: 7px; width: 36px; height: 36px; }
+.btn.ok-on { background: var(--ok-soft); border-color: var(--ok); color: var(--ok); }
+.btn.issue-on { background: var(--issue-soft); border-color: var(--issue); color: var(--issue); }
+.input, select.input, textarea.input {
+  border: 1px solid var(--border); background: var(--surface); border-radius: 10px; padding: 8px 11px; outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.input:focus { border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent); }
+textarea.input { width: 100%; min-height: 72px; resize: vertical; }
+label.check { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+
+/* ---------- шапка */
+.topbar { position: sticky; top: 0; z-index: 30; background: color-mix(in srgb, var(--surface) 82%, transparent); backdrop-filter: saturate(1.4) blur(12px); border-bottom: 1px solid var(--border); }
+.topbar-in { max-width: 1480px; margin: 0 auto; padding: 0 24px; display: flex; align-items: center; gap: 16px; height: 62px; }
+.brand { display: flex; align-items: center; gap: 11px; font-weight: 700; white-space: nowrap; letter-spacing: -.01em; }
+.brand .logo { width: 34px; height: 34px; border-radius: 10px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); display: grid; place-items: center; box-shadow: 0 6px 14px -6px var(--accent); }
+.brand small { display: block; font-weight: 500; color: var(--muted); font-size: 12px; margin-top: -2px; letter-spacing: 0; }
+.nav { display: flex; gap: 4px; overflow-x: auto; flex: 1; scrollbar-width: none; }
+.nav a { padding: 8px 13px; border-radius: 10px; color: var(--muted); font-weight: 600; white-space: nowrap; display: inline-flex; align-items: center; gap: 7px; }
+.nav a:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
+.nav a.active { background: var(--accent-soft); color: var(--accent-text); }
+.nav .count { font-size: 11.5px; padding: 1px 7px; border-radius: 20px; background: var(--surface-3); color: var(--muted); font-variant-numeric: tabular-nums; }
+.nav a.active .count { background: var(--accent); color: #fff; }
+.userbox { position: relative; }
+.avatar { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 12.5px; color: #fff; flex: none; letter-spacing: -.02em; }
+.menu { position: absolute; right: 0; top: 48px; min-width: 250px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-lg); padding: 6px; z-index: 40; animation: pop .14s ease-out; }
+.menu .head { padding: 10px 12px 12px; border-bottom: 1px solid var(--border); margin-bottom: 6px; display: flex; gap: 10px; align-items: center; }
+.menu button { width: 100%; text-align: left; border: 0; background: transparent; padding: 9px 12px; border-radius: 9px; cursor: pointer; display: flex; align-items: center; gap: 9px; }
+.menu button:hover { background: var(--surface-2); }
+
+.page { max-width: 1480px; margin: 0 auto; padding: 26px 24px 80px; }
+.page-title { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin: 0 0 18px; }
+.page-title h1 { font-size: 26px; margin: 0; font-weight: 750; letter-spacing: -.025em; }
+.page-title .sub { color: var(--muted); }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+.card-pad { padding: 18px 20px; }
+.card h3 { margin: 0 0 12px; font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
+.grid { display: grid; gap: 16px; }
+.section-gap { margin-top: 16px; }
+
+/* ---------- hero */
+.hero { display: grid; grid-template-columns: auto 1fr; gap: 26px; align-items: center; padding: 22px 26px; }
+.hero h2 { font-size: 21px; margin: 0 0 4px; font-weight: 750; letter-spacing: -.02em; }
+.hero .lead { color: var(--muted); margin-bottom: 14px; }
+.hero-stats { display: flex; flex-wrap: wrap; gap: 8px; }
+.stat-pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--border); cursor: pointer; transition: border-color .15s, background .15s; }
+.stat-pill:hover { border-color: var(--border-strong); }
+.stat-pill.sel { border-color: var(--accent); background: var(--accent-soft); }
+.stat-pill b { font-size: 16px; font-variant-numeric: tabular-nums; }
+.stat-pill .dot { width: 9px; height: 9px; border-radius: 50%; }
+.hero-meta { display: flex; flex-wrap: wrap; gap: 6px 22px; margin-top: 14px; color: var(--muted); font-size: 13px; }
+.hero-meta b { color: var(--text); font-weight: 650; }
+.donut { position: relative; width: 132px; height: 132px; flex: none; }
+.donut svg { transform: rotate(-90deg); }
+.donut .c { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; }
+.donut .c b { font-size: 28px; font-weight: 800; letter-spacing: -.03em; line-height: 1; display: block; }
+.donut .c span { font-size: 11.5px; color: var(--muted); }
+@media (max-width: 720px) { .hero { grid-template-columns: 1fr; justify-items: start; } }
+
+/* ---------- шаги */
+.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }
+@media (max-width: 1050px) { .steps { grid-template-columns: 1fr; } }
+.step { padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; position: relative; overflow: hidden; }
+.step .n { width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center; font-weight: 800; font-size: 13px; background: var(--accent-soft); color: var(--accent-text); }
+.step .t { font-weight: 700; font-size: 15px; display: flex; align-items: center; gap: 10px; }
+.step .d { color: var(--muted); font-size: 13px; flex: 1; }
+.step .acts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.step.done .n { background: var(--ok-soft); color: var(--ok); }
+.copybox { display: flex; align-items: center; gap: 8px; background: var(--surface-2); border: 1px dashed var(--border-strong); border-radius: 10px; padding: 7px 10px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+
+/* ---------- прогресс */
+.progress { display: flex; height: 10px; border-radius: 10px; overflow: hidden; background: var(--surface-3); }
+.progress > div { height: 100%; transition: width .5s cubic-bezier(.2, .8, .2, 1); }
+.progress.thin { height: 6px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; color: var(--muted); font-size: 12.5px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+
+/* ---------- зона загрузки */
+.drop { border: 2px dashed var(--border-strong); border-radius: 14px; padding: 26px 18px; text-align: center; cursor: pointer; transition: border-color .15s, background .15s; background: var(--surface-2); }
+.drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.drop .big { font-size: 15px; font-weight: 700; margin: 8px 0 2px; }
+.drop svg { color: var(--accent); }
+.drop-overlay { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; background: color-mix(in srgb, var(--accent) 16%, rgba(8, 12, 24, .55)); backdrop-filter: blur(3px); animation: fade .12s; pointer-events: none; }
+.drop-overlay .box { background: var(--surface); border: 2px dashed var(--accent); border-radius: 22px; padding: 38px 54px; text-align: center; box-shadow: var(--shadow-lg); }
+.drop-overlay .box b { display: block; font-size: 20px; margin-top: 10px; letter-spacing: -.01em; }
+.busy { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 85; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-lg); border-radius: 14px; padding: 12px 16px; min-width: 340px; animation: pop .15s; }
+.busy .progress { margin-top: 8px; height: 6px; }
+
+/* ---------- фильтры и таблица */
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 22px 0 12px; }
+.search { position: relative; }
+.search input { padding-left: 34px; width: 320px; max-width: 100%; }
+.search svg { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--faint); }
+.search kbd { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); }
+.seg { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; }
+.seg button { border: 0; background: transparent; padding: 6px 11px; border-radius: 9px; cursor: pointer; color: var(--muted); font-weight: 600; font-size: 13px; display: inline-flex; align-items: center; gap: 7px; }
+.seg button:hover { color: var(--text); }
+.seg button.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
+.seg .n { font-variant-numeric: tabular-nums; color: var(--faint); font-weight: 600; }
+.seg .dot { width: 8px; height: 8px; border-radius: 50%; }
+
+.table-wrap { overflow: auto; }
+table.t { width: 100%; border-collapse: separate; border-spacing: 0; }
+table.t th { position: sticky; top: 0; background: var(--surface-2); color: var(--muted); font-weight: 650; font-size: 12px; text-transform: uppercase; letter-spacing: .03em; text-align: left; padding: 11px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; cursor: pointer; user-select: none; z-index: 1; }
+table.t th:first-child { border-top-left-radius: var(--radius); }
+table.t th:last-child { border-top-right-radius: var(--radius); }
+table.t th.nosort { cursor: default; }
+table.t th .arr { opacity: .6; margin-left: 4px; }
+table.t td { padding: 11px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+table.t tbody tr { cursor: pointer; transition: background .1s; }
+table.t tbody tr:hover td { background: var(--surface-2); }
+table.t tbody tr.sel td { background: var(--accent-soft); }
+table.t tbody tr:last-child td { border-bottom: 0; }
+table.t td.code { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; font-weight: 500; }
+table.t td.name { min-width: 280px; }
+table.t td.name .nm { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+table.t td.num, table.t th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.empty { padding: 48px 20px; text-align: center; color: var(--muted); }
+.empty .ico { font-size: 30px; margin-bottom: 6px; opacity: .7; }
+
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 8px; border-radius: 20px; font-size: 12.5px; font-weight: 650; white-space: nowrap; }
+.pill i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.pill.ok { background: var(--ok-soft); color: var(--ok); }
+.pill.errors { background: var(--err-soft); color: var(--err); }
+.pill.interrupted { background: var(--int-soft); color: var(--int); }
+.pill.pending { background: var(--pend-soft); color: var(--muted); }
+.pill.noinstance { background: transparent; color: var(--faint); border: 1px dashed var(--noi); }
+.pill.rev { background: var(--rev-soft); color: var(--rev); }
+.pill.issue { background: var(--issue-soft); color: var(--issue); }
+.pill.plain { background: var(--surface-2); color: var(--muted); }
+.type { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.who { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.who .avatar { width: 24px; height: 24px; font-size: 10.5px; }
+.errn { color: var(--err); font-weight: 700; }
+.sub-line { font-size: 12px; color: var(--faint); margin-top: 2px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- боковая карточка */
+.backdrop { position: fixed; inset: 0; background: rgba(8, 12, 24, .42); z-index: 50; animation: fade .15s; }
+.drawer { position: fixed; right: 0; top: 0; bottom: 0; width: min(820px, 100vw); background: var(--surface); z-index: 51; box-shadow: var(--shadow-lg); display: flex; flex-direction: column; animation: slide .2s cubic-bezier(.2, .8, .2, 1); }
+@keyframes slide { from { transform: translateX(40px); opacity: 0; } }
+@keyframes fade { from { opacity: 0; } }
+@keyframes pop { from { transform: translateY(6px) scale(.98); opacity: 0; } }
+.drawer-head { padding: 18px 24px 0; border-bottom: 1px solid var(--border); }
+.drawer-head .row1 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.drawer-head .code { font-family: var(--mono); font-size: 14px; font-weight: 700; padding: 3px 8px; border-radius: 8px; background: var(--surface-2); }
+.drawer-head h2 { font-size: 19px; margin: 12px 0 10px; font-weight: 700; line-height: 1.35; letter-spacing: -.015em; }
+.drawer-nav { margin-left: auto; display: flex; gap: 4px; align-items: center; }
+.drawer-nav .pos { color: var(--faint); font-size: 12.5px; margin: 0 6px; font-variant-numeric: tabular-nums; }
+.tabs { display: flex; gap: 2px; margin-top: 12px; }
+.tabs button { border: 0; background: transparent; padding: 10px 14px; cursor: pointer; color: var(--muted); font-weight: 650; border-bottom: 2px solid transparent; display: inline-flex; gap: 7px; align-items: center; }
+.tabs button:hover { color: var(--text); }
+.tabs button.on { color: var(--accent-text); border-bottom-color: var(--accent); }
+.tabs .n { font-size: 11.5px; padding: 0 7px; border-radius: 20px; background: var(--surface-3); color: var(--muted); }
+.tabs .n.err { background: var(--err-soft); color: var(--err); }
+.drawer-body { padding: 20px 24px 40px; overflow: auto; flex: 1; }
+.meta-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+.mg { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; }
+.mg .l { font-size: 12px; color: var(--muted); }
+.mg .v { font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.section { margin-top: 22px; }
+.section > h4 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 700; }
+.copy { cursor: pointer; border-bottom: 1px dashed var(--faint); }
+.review-box { background: linear-gradient(180deg, var(--surface-2), var(--surface)); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; }
+.review-box .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; align-items: center; }
+.errbox { border: 1px solid color-mix(in srgb, var(--err) 25%, transparent); background: color-mix(in srgb, var(--err-soft) 60%, var(--surface)); border-radius: 12px; padding: 11px 14px; margin-bottom: 8px; }
+.errbox.warn { border-color: color-mix(in srgb, var(--int) 30%, transparent); background: color-mix(in srgb, var(--int-soft) 70%, var(--surface)); }
+.errbox .a { font-weight: 700; font-family: var(--mono); font-size: 12.5px; }
+.errbox pre { white-space: pre-wrap; word-break: break-word; font-family: var(--mono); font-size: 11.5px; margin: 8px 0 0; max-height: 300px; overflow: auto; color: var(--muted); background: var(--surface); border-radius: 8px; padding: 8px 10px; }
+.errbox summary { cursor: pointer; color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+.alg-bar { height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); min-width: 2px; }
+.alg-bar.f { background: var(--err); }
+.timeline { position: relative; padding-left: 22px; }
+.timeline::before { content: ""; position: absolute; left: 6px; top: 6px; bottom: 6px; width: 2px; background: var(--border); }
+.tl { position: relative; padding: 0 0 16px; }
+.tl::before { content: ""; position: absolute; left: -21px; top: 5px; width: 12px; height: 12px; border-radius: 50%; background: var(--surface); border: 3px solid var(--pend); }
+.tl.ok::before { border-color: var(--ok); }
+.tl.errors::before { border-color: var(--err); }
+.tl.interrupted::before { border-color: var(--int); }
+.tl .h { display: flex; justify-content: space-between; gap: 10px; }
+.close-x { margin-left: 4px; }
+.kbd-hint { color: var(--faint); font-size: 12px; display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+
+/* ---------- модальные окна */
+.modal { position: fixed; left: 50%; top: 7vh; transform: translateX(-50%); width: min(860px, calc(100vw - 24px)); max-height: 86vh; background: var(--surface); border: 1px solid var(--border); border-radius: 20px; z-index: 52; box-shadow: var(--shadow-lg); display: flex; flex-direction: column; animation: pop .16s ease-out; }
+.modal .mh { padding: 18px 22px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+.modal .mh h3 { margin: 0; font-size: 17px; letter-spacing: -.01em; }
+.modal .mb { padding: 18px 22px; overflow: auto; }
+.modal .mf { padding: 14px 22px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.report { border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; margin-bottom: 10px; }
+.report .nums { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.big-ok { display: flex; gap: 14px; align-items: center; padding: 14px 16px; border-radius: 14px; background: var(--accent-soft); margin-bottom: 14px; }
+.big-ok b { font-size: 22px; }
+
+/* ---------- команда */
+.team { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 1150px) { .team { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 700px) { .team { grid-template-columns: 1fr; } }
+.person { padding: 18px 20px; cursor: pointer; transition: transform .12s, box-shadow .12s; }
+.person:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+.person .top { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+.person .top .avatar { width: 44px; height: 44px; font-size: 16px; }
+.person .nm { font-weight: 750; font-size: 16px; letter-spacing: -.01em; }
+.person .rl { color: var(--muted); font-size: 12.5px; }
+.person .pct { margin-left: auto; text-align: right; }
+.person .pct b { font-size: 26px; font-weight: 800; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.person .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 14px; text-align: center; }
+.person .stats .v { font-weight: 800; font-size: 17px; font-variant-numeric: tabular-nums; }
+.person .stats .l { font-size: 11.5px; color: var(--muted); }
+.person .foot { display: flex; justify-content: space-between; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); font-size: 12.5px; color: var(--muted); }
+.person .foot b { color: var(--text); }
+.chart { width: 100%; height: 260px; }
+.chart text { fill: var(--faint); font-size: 11px; font-family: var(--font); }
+.chart .grid-l { stroke: var(--border); }
+.two { display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px; margin-top: 16px; }
+@media (max-width: 1050px) { .two { grid-template-columns: 1fr; } }
+.feed { max-height: 330px; overflow: auto; }
+.feed .ev { display: grid; grid-template-columns: 28px 1fr; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.feed .ev:last-child { border-bottom: 0; }
+.feed .ev .avatar { width: 26px; height: 26px; font-size: 10.5px; }
+.feed .when { color: var(--faint); font-size: 12px; }
+
+/* ---------- вход */
+.login-wrap { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+.login { width: min(980px, 100%); display: grid; grid-template-columns: 1fr 1.1fr; overflow: hidden; padding: 0; }
+@media (max-width: 820px) { .login { grid-template-columns: 1fr; } .login .side { display: none; } }
+.login .side { background: linear-gradient(145deg, var(--accent), var(--accent-2) 60%, #9b5cff); color: #fff; padding: 36px; display: flex; flex-direction: column; gap: 16px; position: relative; }
+.login .side h1 { font-size: 28px; margin: 18px 0 0; letter-spacing: -.03em; line-height: 1.15; }
+.login .side p { margin: 0; opacity: .88; }
+.login .side ul { margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.login .side li { display: flex; gap: 10px; align-items: flex-start; opacity: .95; }
+.login .side li span { width: 22px; height: 22px; border-radius: 7px; background: rgba(255, 255, 255, .2); display: grid; place-items: center; flex: none; font-size: 12px; font-weight: 800; }
+.login .form { padding: 34px 36px; }
+.login .form h2 { margin: 0 0 4px; font-size: 21px; letter-spacing: -.02em; }
+.login .sub { color: var(--muted); margin-bottom: 18px; }
+.people { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 16px; }
+.pbtn { display: flex; align-items: center; gap: 11px; padding: 11px 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); cursor: pointer; text-align: left; transition: border-color .15s, box-shadow .15s, transform .08s; }
+.pbtn:hover { border-color: var(--border-strong); transform: translateY(-1px); }
+.pbtn.on { border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent); }
+.pbtn .avatar { width: 38px; height: 38px; font-size: 14px; }
+.pbtn .n { font-weight: 700; }
+.pbtn .r { font-size: 12px; color: var(--muted); }
+.login .err { color: var(--err); margin: 8px 0; min-height: 20px; font-size: 13px; }
+
+/* ---------- уведомления */
+.toasts { position: fixed; right: 20px; bottom: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 95; }
+.toast { display: flex; gap: 10px; align-items: center; background: var(--text); color: var(--surface); padding: 11px 15px; border-radius: 12px; box-shadow: var(--shadow-lg); max-width: 440px; animation: pop .16s; font-weight: 500; }
+.toast.err { background: var(--err); color: #fff; }
+
+.bulkbar { position: sticky; bottom: 16px; margin-top: 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--text); color: var(--surface); padding: 10px 14px; border-radius: 14px; box-shadow: var(--shadow-lg); z-index: 5; }
+.bulkbar select { color: var(--text); }
+.spin { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: rot .7s linear infinite; display: inline-block; vertical-align: -3px; }
+@keyframes rot { to { transform: rotate(360deg); } }
+.skel { height: 14px; border-radius: 7px; background: linear-gradient(90deg, var(--surface-2), var(--surface-3), var(--surface-2)); background-size: 200% 100%; animation: sk 1.2s infinite; }
+@keyframes sk { to { background-position: -200% 0; } }
+
+/* ---------- этап 2, версии алгоритмов, «пока не правим» */
+.pill.partial { background: var(--accent-soft); color: var(--accent-text); }
+.pill.ign { background: var(--surface-2); color: var(--muted); border: 1px dashed var(--border-strong); }
+.pill.fixd { background: var(--rev-soft); color: var(--rev); }
+.pill.fixp { background: var(--int-soft); color: var(--int); }
+.pill.small { font-size: 11.5px; padding: 1px 8px; }
+.stagebar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.stagebar .seg button { font-size: 13.5px; padding: 7px 14px; }
+.stagebar .seg button:disabled { opacity: .55; cursor: not-allowed; }
+.stagebar .hint { color: var(--muted); font-size: 13px; }
+.stage-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 20px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); color: #fff; font-size: 12px; font-weight: 700; }
+.mini-progress { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.mini-progress .progress { width: 70px; height: 5px; margin: 0; }
+.deploy-card { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; padding: 16px 20px; margin-bottom: 16px; border: 1px solid color-mix(in srgb, var(--int) 35%, var(--border)); background: linear-gradient(135deg, var(--int-soft), var(--surface) 70%); }
+.deploy-card.calm { border-color: var(--border); background: var(--surface); }
+.deploy-card .txt { flex: 1; min-width: 280px; }
+.deploy-card .txt b { font-size: 15px; }
+.deploy-card details { margin-top: 8px; }
+.deploy-card details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.deploy-card .vlist { max-height: 220px; overflow: auto; margin-top: 6px; font-size: 12.5px; }
+.deploy-card .vlist div { padding: 3px 0; border-bottom: 1px dashed var(--border); }
+.deploy-card .act { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.errbox.ign { border-color: var(--border); background: var(--surface-2); opacity: .8; }
+.errbox .tags { display: inline-flex; gap: 6px; margin-left: 8px; vertical-align: 1px; }
+.doc-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 16px 0 8px; font-size: 13px; }
+.doc-h:first-child { margin-top: 0; }
+.owners { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; font-size: 12.5px; color: var(--muted); }
+.owners .who { font-size: 12.5px; }
+.tgl { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); background: var(--surface); border-radius: 20px; padding: 3px 10px; font-size: 12px; font-weight: 650; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.tgl:hover { border-color: var(--border-strong); color: var(--text); }
+.tgl.on { background: var(--surface-3); color: var(--text); border-style: dashed; }
+.tgl:disabled { cursor: default; }
+.btn .sub { font-weight: 500; opacity: .75; }
+.why { font-size: 12px; color: var(--faint); margin-top: 6px; line-height: 1.45; }
+
+/* ---------- демо-режим */
+.demo-bar { background: var(--int-soft); color: var(--int); text-align: center; padding: 6px 12px; font-size: 13px; font-weight: 650; }
+.demo-note { background: var(--int-soft); color: var(--int); border-radius: 12px; padding: 9px 12px; margin-bottom: 14px; font-size: 13px; }
+
+@media (max-width: 760px) {
+  .hide-sm { display: none !important; }
+  .topbar-in { gap: 6px; padding: 0 12px; height: 56px; }
+  .brand > div { display: none; }
+  .page { padding: 18px 12px 60px; }
+  .page-title h1 { font-size: 22px; }
+  .search input { width: 100%; }
+  .search { flex: 1; }
+  .hero { padding: 18px; }
+  .drawer-head, .drawer-body { padding-left: 16px; padding-right: 16px; }
+  .busy { min-width: 0; width: calc(100vw - 24px); }
+}
+
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toasts" class="toasts" aria-live="polite"></div>
+<script>
+// Разбор протокола ПКТС 2.0 в браузере.
+// Пакет («Пакетное выполнение алгоритмов актуализации»): документ начинается строкой «=== Passport (guid), N/M ===»;
+// документ выполнен, если пришло «Время выполнения LoadDocumentAsync», начался следующий документ или «Операция завершена».
+// Документ, на котором протокол оборвался (сервер упал) или началась новая операция, — прерван.
+// Одиночная «Актуализация данных» (без guid): документ определяется по составу алгоритмов.
+// После LoadDocumentAsync платформа выполняет генерацию связей документа (…ГенерацияСвязей, DocLinkGenerator…, EL_…_TO.TOList) —
+// это часть того же документа, а не отдельный документ без GUID.
+// Время в протоколе — UTC: при разборе прибавляется shiftHours (по умолчанию 3 — московское).
+const LogParser = (() => {
+  const LINK_RX = /(ГенерацияСвяз|DocLinkGenerator|\.Link$|\.Связь$|DocLink$|_TO\.TO(List|Single)$)/i;
+  const RX = {
+    line: /^(\d{4})\.(\d{2})\.(\d{2}) (\d{2}):(\d{2}):(\d{2}),MessageType=(\w+),Message=(.*)$/,
+    docStart: /^===\s*(\w+)\s*\(([0-9a-fA-F-]{36})\)\s*,\s*(\d+)\s*\/\s*(\d+)\s*===/,
+    operStart: /^Операция запущена:\s*(.*)$/,
+    operEnd: /^Операция завершена:\s*(.*)$/,
+    algStart: /^(.+?): Алгоритм запущен\s*\((\d+)\)/,
+    algEnd: /^(.+?): Алгоритм завершен\s*\((\d+)\)\s*(\S+)/,
+    algFail: /^(.+?): Ошибка выполнения алгоритма\s*(.*)$/,
+    loaderFail: /Не удалось выполнить алгоритм\s*"([^"]+)"\s*;?\s*(.*)$/,
+    loadDone: /Время выполнения LoadDocumentAsync:\s*(\S+)/,
+    algMsg: /^([A-Za-zА-Яа-яЁё0-9_]+(?:\.[A-Za-zА-Яа-яЁё0-9_]+)+):\s([\s\S]*)$/,
+    summary: /^Сводка:\s*(.*)$/,
+  };
+
+  function dur(s) {
+    const m = /^(?:(\d+)\.)?(\d+):(\d{2}):(\d{2}(?:\.\d+)?)$/.exec((s || '').trim());
+    if (!m) return 0;
+    return (+(m[1] || 0)) * 86400 + (+m[2]) * 3600 + (+m[3]) * 60 + parseFloat(m[4]);
+  }
+
+  function decode(buf) {
+    const bytes = new Uint8Array(buf);
+    try {
+      return new TextDecoder('utf-8', { fatal: true }).decode(bytes).replace(/^﻿/, '');
+    } catch {
+      return new TextDecoder('windows-1251').decode(bytes);
+    }
+  }
+
+  const p2 = n => String(n).padStart(2, '0');
+  function stamp(m, shiftHours) {
+    const t = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) + shiftHours * 3600000);
+    return `${t.getUTCFullYear()}-${p2(t.getUTCMonth() + 1)}-${p2(t.getUTCDate())}T${p2(t.getUTCHours())}:${p2(t.getUTCMinutes())}:${p2(t.getUTCSeconds())}`;
+  }
+  const isLink = (links, name) => LINK_RX.test(name) || (links && links.has(name.toLowerCase()));
+
+  // opts: { shiftHours: 3, links: Set(имена алгоритмов генерации связей в нижнем регистре) }
+  function parse(text, opts) {
+    const shiftHours = opts && opts.shiftHours != null ? +opts.shiftHours : 3;
+    const links = opts && opts.links;
+    const res = { operations: [], batch: false, summary: null, from: null, to: null, docs: [] };
+    let cur = null, batchOp = false, lastErr = null;
+    const secsBetween = (a, b) => (new Date(b) - new Date(a)) / 1000;
+
+    function close(finished, end) {
+      if (!cur) return;
+      const d = cur.doc;
+      d.finished = finished || cur.loadDone;
+      if (!d.endAt && end) d.endAt = end;
+      d.algs = Object.values(cur.algs).sort((a, b) => b.totalSec - a.totalSec);
+      if (!d.finished) d.running = [...new Set(Object.values(cur.open))];
+      if (d.loadSec == null && d.endAt) d.loadSec = secsBetween(d.startAt, d.endAt);
+      cur = null;
+    }
+    function newDoc(ts, implicit) {
+      const c = { doc: { guid: null, doctype: null, idx: 0, total: 0, startAt: ts, endAt: null, loadSec: null, finished: false, implicit, algs: [], errors: [], warnings: 0, running: [] }, algs: {}, open: {}, loadDone: false };
+      res.docs.push(c.doc);
+      return c;
+    }
+    function agg(name) {
+      return cur.algs[name] || (cur.algs[name] = { name, count: 0, totalSec: 0, maxSec: 0, failed: false });
+    }
+    function addError(alg, message, ts) {
+      if (!cur) cur = newDoc(ts, true);
+      if (alg) {
+        agg(alg).failed = true;
+        const dup = cur.doc.errors.find(e => e.alg === alg && (e.message === message || message.startsWith(e.message) || e.message.startsWith(message)));
+        if (dup) { lastErr = dup; return; }
+      }
+      lastErr = { alg, message: message.length > 1000 ? message.slice(0, 1000) : message, details: '', at: ts };
+      cur.doc.errors.push(lastErr);
+    }
+
+    for (const raw of text.split('\n')) {
+      const line = raw.replace(/\r$/, '').replace(/^﻿/, '');
+      const m = RX.line.exec(line);
+      if (!m) {
+        if (lastErr && lastErr.details.length < 6000 && line.length) lastErr.details += (lastErr.details ? '\n' : '') + line;
+        continue;
+      }
+      lastErr = null;
+      const ts = stamp(m, shiftHours);
+      const type = m[7], msg = m[8];
+      if (!res.from) res.from = ts;
+      res.to = ts;
+      let mm;
+      if ((mm = RX.operStart.exec(msg))) {
+        close(false, null);
+        const op = mm[1].trim();
+        res.operations.push(op);
+        batchOp = /пакетное/i.test(op);
+        continue;
+      }
+      if ((mm = RX.docStart.exec(msg))) {
+        close(true, ts);
+        res.batch = true;
+        batchOp = true;   // пакет, даже если начало протокола (строка «Операция запущена») не попало в файл
+        cur = newDoc(ts, false);
+        Object.assign(cur.doc, { doctype: mm[1], guid: mm[2].toLowerCase(), idx: +mm[3], total: +mm[4] });
+        continue;
+      }
+      if (RX.operEnd.test(msg)) { close(true, ts); continue; }
+      if ((mm = RX.summary.exec(msg))) { res.summary = mm[1]; continue; }
+
+      const relevant = RX.algStart.test(msg) || RX.algEnd.test(msg) || RX.algFail.test(msg) || type === 'Error' || RX.loadDone.test(msg);
+      if (!cur) {
+        if (!relevant || batchOp) continue;
+        cur = newDoc(ts, true);
+      }
+      if ((mm = RX.algStart.exec(msg))) {
+        const name = mm[1].trim();
+        // одиночные запуски: после LoadDocumentAsync — либо генерация связей этого документа, либо уже следующий документ
+        if (cur.loadDone && !batchOp && !isLink(links, name)) { close(true, null); cur = newDoc(ts, true); }
+        cur.open[mm[2]] = agg(name).name;
+        continue;
+      }
+      if ((mm = RX.algEnd.exec(msg))) {
+        const a = agg(mm[1].trim()), sec = dur(mm[3]);
+        a.count++; a.totalSec += sec; if (sec > a.maxSec) a.maxSec = sec;
+        delete cur.open[mm[2]];
+        continue;
+      }
+      if ((mm = RX.algFail.exec(msg))) { addError(mm[1].trim(), mm[2].trim(), ts); continue; }
+      if ((mm = RX.loadDone.exec(msg))) {
+        cur.loadDone = true;
+        cur.doc.loadSec = dur(mm[1]);
+        cur.doc.endAt = ts;
+        continue;
+      }
+      if (type === 'Error') {
+        const lf = RX.loaderFail.exec(msg);
+        // сообщение вида «Вид.Алгоритм: текст» (валидация и т.п.) — ошибка этого алгоритма, если он запускался в документе
+        const am = !lf && RX.algMsg.exec(msg);
+        if (lf) addError(lf[1].trim(), lf[2].trim(), ts);
+        else if (am && cur && cur.algs[am[1]]) addError(am[1], am[2].trim(), ts);
+        else addError(null, msg, ts);
+        continue;
+      }
+      if (type === 'Warning') cur.doc.warnings++;
+    }
+    close(false, null);
+    for (const d of res.docs) d.algs.forEach(a => { a.totalSec = Math.round(a.totalSec * 1000) / 1000; a.maxSec = Math.round(a.maxSec * 1000) / 1000; });
+    return res;
+  }
+
+  // вид для протокола без пакетных маркеров — по составу выполненных алгоритмов
+  function matchKind(kinds, doc, links) {
+    // генерация связей общая для многих видов — по ней вид не определить
+    const names = new Set(doc.algs.filter(a => !isLink(links, a.name)).map(a => a.name.toLowerCase()));
+    if (!names.size) return { code: null, candidates: [] };
+    const scored = kinds.map(k => {
+      const inter = k.algorithms.filter(a => names.has(a.toLowerCase())).length;
+      return { k, inter, cover: inter / names.size, prec: k.algorithms.length ? inter / k.algorithms.length : 0 };
+    }).filter(x => x.inter > 0)
+      .sort((a, b) => b.cover - a.cover || b.prec - a.prec || (a.k.guid ? 0 : 1) - (b.k.guid ? 0 : 1));
+    const candidates = scored.slice(0, 8).map(x => x.k.code);
+    if (!scored.length) return { code: null, candidates };
+    const best = scored[0];
+    const unique = scored.length === 1 || scored[1].cover < best.cover || scored[1].prec < best.prec;
+    return { code: best.cover >= 0.8 && unique ? best.k.code : null, candidates };
+  }
+
+  return { parse, decode, matchKind, dur, isLink };
+})();
+if (typeof module !== 'undefined') module.exports = LogParser;
+
+// Слой данных: Supabase (рабочий режим) или localStorage (демо, если адрес Supabase не задан).
+// Все методы асинхронные и возвращают объекты в camelCase.
+const DB = (() => {
+  const CFG = window.PKTS_CONFIG || {};
+  const DEMO = !CFG.supabaseUrl || !CFG.supabaseAnonKey;
+  const SB_CDN = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+
+  const kindFromRow = r => ({
+    code: r.code, name: r.name || '', doctype: r.doctype, category: r.category || (r.doctype === 'Passport' ? 'passport' : 'summary'),
+    guid: r.guid, assignee: r.assignee, algorithms: r.algorithms || [], linkAlgs: r.link_algs || [],
+    reviewStatus: r.review_status, reviewComment: r.review_comment, reviewBy: r.review_by, reviewAt: r.review_at,
+    review2Status: r.review2_status, review2Comment: r.review2_comment, review2By: r.review2_by, review2At: r.review2_at,
+  });
+  const errAlgsOf = errors => (errors || []).map(e => e.alg || '');
+  const runFromRow = r => ({
+    id: r.id, uploadId: r.upload_id, pos: r.pos, guid: r.guid, doctype: r.doctype, idx: r.idx, total: r.total,
+    startAt: r.start_at, endAt: r.end_at, loadSec: r.load_sec, finished: r.finished, implicit: r.implicit,
+    kindCode: r.kind_code, match: r.match, candidates: r.candidates || [], errorCount: r.error_count || 0,
+    warnings: r.warnings || 0, running: r.running || [], algs: r.algs, errors: r.errors,
+    ps: r.ps || '', errAlgs: r.err_algs && r.err_algs.length ? r.err_algs : (r.error_count ? null : []), batchId: r.batch_id || null,
+  });
+  const runToRow = r => ({
+    upload_id: r.uploadId, pos: r.pos, guid: r.guid, doctype: r.doctype, idx: r.idx, total: r.total, start_at: r.startAt,
+    end_at: r.endAt, load_sec: r.loadSec, finished: r.finished, implicit: r.implicit, kind_code: r.kindCode, match: r.match,
+    candidates: r.candidates || [], algs: r.algs || [], errors: r.errors || [], error_count: (r.errors || []).length,
+    warnings: r.warnings || 0, running: r.running || [], ps: r.ps || '', err_algs: errAlgsOf(r.errors), batch_id: r.batchId || null,
+  });
+  const uploadFromRow = r => ({
+    id: r.id, fileName: r.file_name, by: r.by_login, at: r.at, size: r.size, operations: r.operations || [], batch: r.batch,
+    summary: r.summary, logFrom: r.log_from, logTo: r.log_to, storagePath: r.storage_path,
+  });
+  const eventFromRow = r => ({ id: r.id, at: r.at, by: r.by_login, text: r.text, kind: r.kind, uploadId: r.upload_id });
+  const LIGHT = 'id,upload_id,pos,guid,doctype,idx,total,start_at,end_at,load_sec,finished,implicit,kind_code,match,error_count,warnings,running,ps,err_algs,batch_id';
+  const versionFromRow = r => ({ id: r.id, name: r.name, version: r.version, note: r.note, at: r.created_at, by: r.created_by, deployId: r.deploy_id, commit: r.commit });
+  const deployFromRow = r => ({ id: r.id, at: r.at, by: r.by_login, note: r.note, algCount: r.alg_count });
+  const flagFromRow = r => ({ name: r.name, ignored: r.ignored, note: r.note, by: r.by_login, at: r.at });
+
+  function loadScript(src) {
+    return new Promise((ok, fail) => {
+      const s = document.createElement('script');
+      s.src = src; s.onload = ok; s.onerror = () => fail(new Error('Не удалось загрузить библиотеку Supabase (нет интернета?)'));
+      document.head.appendChild(s);
+    });
+  }
+  const chk = ({ data, error }) => {
+    if (error) {
+      if (error.code === 'PGRST205' || /schema cache/.test(error.message || ''))
+        throw new Error('База Supabase ещё не настроена: выполните в SQL Editor файл supabase/setup_all.sql (см. README)');
+      throw new Error(error.message || String(error));
+    }
+    return data;
+  };
+
+  // ---------------------------------------------------------------- Supabase
+  class Supa {
+    async init() {
+      await loadScript(SB_CDN);
+      this.sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey, { auth: { persistSession: true, autoRefreshToken: true } });
+    }
+    async users() {
+      const rows = chk(await this.sb.from('profiles').select('login,name,role,is_admin,email').order('sort'));
+      this._users = rows.map(r => ({ login: r.login, name: r.name, role: r.role, isAdmin: r.is_admin, email: r.email }));
+      return this._users;
+    }
+    async me() {
+      const { data } = await this.sb.auth.getSession();
+      const email = data.session && data.session.user && data.session.user.email;
+      if (!email) return null;
+      const users = this._users || await this.users();
+      return users.find(u => (u.email || '').toLowerCase() === email.toLowerCase()) || null;
+    }
+    async signIn(login, password) {
+      const users = this._users || await this.users();
+      const u = users.find(x => x.login === login);
+      if (!u) throw new Error('Нет такого пользователя');
+      const { error } = await this.sb.auth.signInWithPassword({ email: u.email, password });
+      if (error) throw new Error(/invalid/i.test(error.message) ? 'Неверный пароль' : error.message);
+      return u;
+    }
+    async signOut() { await this.sb.auth.signOut(); }
+    async changePassword(me, oldPw, newPw) {
+      const { error } = await this.sb.auth.signInWithPassword({ email: me.email, password: oldPw });
+      if (error) throw new Error('Текущий пароль неверный');
+      chk(await this.sb.auth.updateUser({ password: newPw }));
+    }
+    async kinds() {
+      const out = [];
+      for (let from = 0; ; from += 1000) {
+        const rows = chk(await this.sb.from('kinds').select('*').order('code').range(from, from + 999));
+        out.push(...rows.map(kindFromRow));
+        if (rows.length < 1000) break;
+      }
+      return out;
+    }
+    async runsLight() {
+      const out = [];
+      for (let from = 0; ; from += 1000) {
+        const rows = chk(await this.sb.from('doc_runs').select(LIGHT).order('id').range(from, from + 999));
+        out.push(...rows.map(runFromRow));
+        if (rows.length < 1000) break;
+      }
+      return out;
+    }
+    async uploads() {
+      return chk(await this.sb.from('uploads').select('*').order('id', { ascending: false })).map(uploadFromRow);
+    }
+    async page(build) {
+      const out = [];
+      for (let from = 0; ; from += 1000) {
+        const rows = chk(await build().range(from, from + 999));
+        out.push(...rows);
+        if (rows.length < 1000) break;
+      }
+      return out;
+    }
+    async instances() {
+      return (await this.page(() => this.sb.from('instances').select('id,kind_code,guid,ps,doctype,stage,ord').order('id')))
+        .map(r => ({ id: r.id, kindCode: r.kind_code, guid: r.guid, ps: r.ps || '', doctype: r.doctype, stage: r.stage, ord: r.ord }));
+    }
+    async algMeta() {
+      const [flags, versions, deploys] = await Promise.all([
+        this.page(() => this.sb.from('alg_flags').select('*').order('name')),
+        // версия 1 — исходное состояние; нужны только исправления и ещё не выложенное
+        this.page(() => this.sb.from('alg_versions').select('id,name,version,note,created_at,created_by,deploy_id,commit')
+          .or('version.gt.1,deploy_id.is.null').order('id')),
+        this.page(() => this.sb.from('deploys').select('*').order('id')),
+      ]);
+      return { flags: flags.map(flagFromRow), versions: versions.map(versionFromRow), deploys: deploys.map(deployFromRow) };
+    }
+    async setAlgFlag(name, ignored, note, by) {
+      chk(await this.sb.from('alg_flags').upsert({ name, ignored, note: note || null, by_login: by, at: new Date().toISOString() }));
+    }
+    async confirmDeploy(note) {
+      return chk(await this.sb.rpc('confirm_deploy', { p_note: note || '' }));
+    }
+    async saveBatch(by, stage, items) {
+      return chk(await this.sb.from('batches').insert({ by_login: by, stage, total: items.length, items }).select('id').single()).id;
+    }
+    async findBatches(total) {
+      return chk(await this.sb.from('batches').select('id,at,items').eq('total', total).order('id', { ascending: false }).limit(30));
+    }
+    async runsFull(filter) {
+      let q = this.sb.from('doc_runs').select('*').order('id');
+      if (filter.kindCode) q = q.eq('kind_code', filter.kindCode);
+      if (filter.uploadId) q = q.eq('upload_id', filter.uploadId);
+      if (filter.ids) q = q.in('id', filter.ids);
+      return chk(await q).map(runFromRow);
+    }
+    async runsAlgs(ids) {
+      const out = [];
+      for (let i = 0; i < ids.length; i += 200) {
+        const rows = chk(await this.sb.from('doc_runs').select('id,kind_code,algs').in('id', ids.slice(i, i + 200)));
+        out.push(...rows.map(runFromRow));
+      }
+      return out;
+    }
+    async saveUpload(meta, runs, rawText) {
+      const row = chk(await this.sb.from('uploads').insert({
+        file_name: meta.fileName, by_login: meta.by, size: meta.size, operations: meta.operations, batch: meta.batch,
+        summary: meta.summary, log_from: meta.logFrom, log_to: meta.logTo,
+      }).select().single());
+      const id = row.id;
+      try {
+        for (let i = 0; i < runs.length; i += 100)
+          chk(await this.sb.from('doc_runs').insert(runs.slice(i, i + 100).map(r => runToRow({ ...r, uploadId: id }))));
+      } catch (e) {
+        await this.sb.from('uploads').delete().eq('id', id);
+        throw e;
+      }
+      // исходный файл — в хранилище (необязательно: если корзины нет, просто не сохраняем)
+      try {
+        const path = `${id}/${Date.now()}.txt`;
+        const { error } = await this.sb.storage.from('protocols').upload(path, new Blob([rawText], { type: 'text/plain;charset=utf-8' }));
+        if (!error) await this.sb.from('uploads').update({ storage_path: path }).eq('id', id);
+      } catch { }
+      return id;
+    }
+    async deleteUpload(u) {
+      if (u.storagePath) { try { await this.sb.storage.from('protocols').remove([u.storagePath]); } catch { } }
+      chk(await this.sb.from('uploads').delete().eq('id', u.id));
+    }
+    async rawUrl(u) {
+      if (!u.storagePath) return null;
+      const d = chk(await this.sb.storage.from('protocols').createSignedUrl(u.storagePath, 600, { download: u.fileName }));
+      return d.signedUrl;
+    }
+    async updateRun(id, patch) {
+      chk(await this.sb.from('doc_runs').update({ kind_code: patch.kindCode, match: patch.match }).eq('id', id));
+    }
+    async setReview(code, rv, stage) {
+      const p = stage === 2 ? 'review2_' : 'review_';
+      chk(await this.sb.from('kinds').update({ [p + 'status']: rv.status, [p + 'comment']: rv.comment, [p + 'by']: rv.by, [p + 'at']: rv.at }).eq('code', code));
+    }
+    async assign(codes, login) {
+      for (let i = 0; i < codes.length; i += 200)
+        chk(await this.sb.from('kinds').update({ assignee: login }).in('code', codes.slice(i, i + 200)));
+    }
+    async events(limit) {
+      return chk(await this.sb.from('events').select('*').order('id', { ascending: false }).limit(limit)).map(eventFromRow);
+    }
+    async addEvent(e) {
+      try { await this.sb.from('events').insert({ by_login: e.by, text: e.text, kind: e.kind || null, upload_id: e.uploadId || null }); } catch { }
+    }
+  }
+
+  // ---------------------------------------------------------------- демо (localStorage)
+  class Local {
+    async init() {
+      this.key = 'pkts_demo_v1';
+      let st = null;
+      try { st = JSON.parse(localStorage.getItem(this.key) || 'null'); } catch { }
+      if (!st) {
+        let seed;
+        try { seed = await (await fetch('seed.json')).json(); }
+        catch { throw new Error('Демо-режим: рядом с index.html нет seed.json, а Supabase не настроен (см. PKTS_CONFIG в начале файла)'); }
+        st = {
+          users: seed.users.map(u => ({ ...u, isAdmin: u.login === 'dima', email: u.login + '@demo' })),
+          kinds: seed.kinds.map(k => ({ ...k, instances: undefined, reviewStatus: null, reviewComment: null, reviewBy: null, reviewAt: null })),
+          instances: seed.kinds.flatMap(k => (k.instances || []).map(([guid, ps], ord) => ({ kindCode: k.code, guid, ps: ps || '', doctype: k.doctype, stage: 2, ord }))),
+          uploads: [], runs: [], events: [], nextId: 1, me: null,
+        };
+      }
+      for (const key of ['instances', 'flags', 'versions', 'deploys', 'batches']) st[key] = st[key] || [];
+      st.instances.forEach((x, i) => { x.id = x.id || i + 1; });
+      this.st = st;
+      this.save();
+    }
+    save() { try { localStorage.setItem(this.key, JSON.stringify(this.st)); } catch (e) { console.warn('localStorage', e); } }
+    async users() { return this.st.users; }
+    async me() { return this.st.users.find(u => u.login === this.st.me) || null; }
+    async signIn(login) { this.st.me = login; this.save(); return this.me(); }
+    async signOut() { this.st.me = null; this.save(); }
+    async changePassword() { }
+    async kinds() { return JSON.parse(JSON.stringify(this.st.kinds)); }
+    async runsLight() { return this.st.runs.map(r => ({ ...r, algs: undefined, errors: undefined, errAlgs: r.errAlgs || errAlgsOf(r.errors) })); }
+    async uploads() { return this.st.uploads.slice().reverse(); }
+    async runsFull(f) {
+      return this.st.runs.filter(r => (!f.kindCode || r.kindCode === f.kindCode) && (!f.uploadId || r.uploadId === f.uploadId) && (!f.ids || f.ids.includes(r.id)));
+    }
+    async runsAlgs(ids) { return this.st.runs.filter(r => ids.includes(r.id)); }
+    async instances() { return this.st.instances; }
+    async algMeta() { return { flags: this.st.flags, versions: this.st.versions, deploys: this.st.deploys }; }
+    async setAlgFlag(name, ignored, note, by) {
+      this.st.flags = this.st.flags.filter(f => f.name !== name).concat([{ name, ignored, note, by, at: new Date().toISOString() }]);
+      this.save();
+    }
+    async confirmDeploy(note) {
+      const pend = this.st.versions.filter(v => !v.deployId);
+      if (!pend.length) throw new Error('Нет обновлённых алгоритмов, ожидающих выкладки');
+      const id = this.st.deploys.length + 1;
+      this.st.deploys.push({ id, at: new Date().toISOString(), by: this.st.me, note, algCount: pend.length });
+      pend.forEach(v => { v.deployId = id; });
+      this.save();
+      return id;
+    }
+    async saveBatch(by, stage, items) {
+      const id = this.st.batches.length + 1;
+      this.st.batches.push({ id, by, stage, at: new Date().toISOString(), total: items.length, items });
+      this.save();
+      return id;
+    }
+    async findBatches(total) { return this.st.batches.filter(b => b.total === total).slice().reverse().slice(0, 30); }
+    async saveUpload(meta, runs) {
+      const id = (this.st.uploads.reduce((m, u) => Math.max(m, u.id), 0)) + 1;
+      this.st.uploads.push({ ...meta, id, at: new Date().toISOString() });
+      runs.forEach(r => this.st.runs.push({ ...r, id: this.st.nextId++, uploadId: id, errorCount: (r.errors || []).length, errAlgs: errAlgsOf(r.errors), ps: r.ps || '' }));
+      this.save();
+      return id;
+    }
+    async deleteUpload(u) {
+      this.st.uploads = this.st.uploads.filter(x => x.id !== u.id);
+      this.st.runs = this.st.runs.filter(r => r.uploadId !== u.id);
+      this.save();
+    }
+    async rawUrl() { return null; }
+    async updateRun(id, p) { const r = this.st.runs.find(x => x.id === id); if (r) { r.kindCode = p.kindCode; r.match = p.match; } this.save(); }
+    async setReview(code, rv, stage) {
+      const k = this.st.kinds.find(x => x.code === code);
+      const p = stage === 2 ? 'review2' : 'review';
+      Object.assign(k, { [p + 'Status']: rv.status, [p + 'Comment']: rv.comment, [p + 'By']: rv.by, [p + 'At']: rv.at });
+      this.save();
+    }
+    async assign(codes, login) { this.st.kinds.forEach(k => { if (codes.includes(k.code)) k.assignee = login; }); this.save(); }
+    async events(limit) { return this.st.events.slice(-limit).reverse(); }
+    async addEvent(e) {
+      this.st.events.push({ ...e, id: this.st.events.length + 1, at: new Date().toISOString() });
+      if (this.st.events.length > 500) this.st.events.splice(0, this.st.events.length - 500);
+      this.save();
+    }
+  }
+
+  const impl = DEMO ? new Local() : new Supa();
+  impl.demo = DEMO;
+  return impl;
+})();
+
+(() => {
+  'use strict';
+
+  // =====================================================================================================================
+  // состояние
+  const S = {
+    me: null, users: [], kinds: [], runs: [], uploadsList: [], avgDocSec: null, sig: '',
+    instances: [], flags: new Map(), versions: new Map(), pendingVers: [], deploys: [],
+    route: 'my', kindOpen: null, tab: 'overview', nav: [],
+    f: {
+      my: { q: '', status: 'all', type: 'all', stage: null },
+      all: { q: '', status: 'all', type: 'all', who: 'all', stage: 1 },
+      algs: { q: '', mode: 'all' },
+    },
+    sort: { my: { key: 'status', dir: 1 }, all: { key: 'code', dir: 1 }, algs: { key: 'totalSec', dir: -1 } },
+    selected: new Set(), menu: false, uploading: false, algs: null,
+  };
+
+  const STATUS = {
+    ok: { label: 'Выполнен', many: 'Выполнено', color: 'var(--ok)' },
+    errors: { label: 'С ошибками', many: 'С ошибками', color: 'var(--err)' },
+    partial: { label: 'Частично', many: 'Частично', color: 'var(--accent)' },
+    interrupted: { label: 'Прерван', many: 'Прервано', color: 'var(--int)' },
+    pending: { label: 'Не выполнялся', many: 'Не выполнялось', color: 'var(--pend)' },
+    noinstance: { label: 'Нет экземпляра', many: 'Нет экземпляра', color: 'var(--noi)' },
+  };
+  const ORDER = ['interrupted', 'partial', 'pending', 'errors', 'ok', 'noinstance'];
+  const PALETTE = ['#4255ff', '#e8590c', '#0ca678', '#9c36b5', '#1098ad', '#d6336c'];
+  const STAGE2_INFO = 'паспорта и сводные — ещё до 10 других документов вида, аналитические — тот же документ со всеми его наборами параметров';
+
+  // =====================================================================================================================
+  // утилиты
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const plural = (n, a, b, c) => { const m10 = n % 10, m100 = n % 100; return m10 === 1 && m100 !== 11 ? a : m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20) ? b : c; };
+  const nf = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 });
+  function fmtSec(s) {
+    if (s == null || isNaN(s)) return '—';
+    if (s < 1) return nf.format(Math.round(s * 100) / 100) + ' с';
+    if (s < 60) return nf.format(Math.round(s * 10) / 10) + ' с';
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = Math.round(s % 60);
+    if (h > 0) return `${h} ч ${String(m).padStart(2, '0')} мин`;
+    return `${m} мин ${String(sec).padStart(2, '0')} с`;
+  }
+  const pad = n => String(n).padStart(2, '0');
+  // Все времена показываются по Москве. Время из протоколов хранится уже московским (при разборе +3 ч к UTC сервера),
+  // поэтому строки без часового пояса читаются как +03:00 — так «N мин назад» верно у всех, в какой бы стране человек ни был.
+  const CFG = window.PKTS_CONFIG || {};
+  const LOG_SHIFT = CFG.logShiftHours != null ? +CFG.logShiftHours : 3;
+  const TZ = 'Europe/Moscow';
+  function toDate(v) {
+    if (v == null || v === '') return null;
+    if (v instanceof Date) return v;
+    if (typeof v === 'number') return new Date(v);
+    const s = String(v).replace(' ', 'T');
+    return new Date(/([zZ]|[+-]\d\d:?\d\d)$/.test(s) ? s : s + '+03:00');
+  }
+  const ts = v => { const d = toDate(v); return d ? d.getTime() : 0; };
+  const dtf = new Intl.DateTimeFormat('ru-RU', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+  function fmtDT(v, withYear) {
+    const d = toDate(v);
+    if (!d || isNaN(d)) return '—';
+    const p = {};
+    dtf.formatToParts(d).forEach(x => { p[x.type] = x.value; });
+    return `${p.day}.${p.month}${withYear ? '.' + p.year : ''} ${p.hour}:${p.minute}`;
+  }
+  function ago(v) {
+    if (!v) return '';
+    const s = (Date.now() - ts(v)) / 1000;
+    if (s < 45) return 'только что';
+    if (s < 3600) return `${Math.max(1, Math.round(s / 60))} мин назад`;
+    if (s < 86400) return `${Math.floor(s / 3600)} ч назад`;
+    if (s < 86400 * 2) return 'вчера, ' + fmtDT(v).slice(-5);
+    return fmtDT(v);
+  }
+  const userIdx = login => Math.max(0, S.users.findIndex(u => u.login === login));
+  const userName = login => (S.users.find(u => u.login === login) || {}).name || login || '—';
+  const color = login => PALETTE[userIdx(login) % PALETTE.length];
+  const avatar = (login, name) => `<span class="avatar" style="background:${color(login)}">${esc((name || userName(login) || '?').slice(0, 2))}</span>`;
+  const who = login => login ? `<span class="who">${avatar(login)}${esc(userName(login))}</span>` : '<span class="faint">не назначен</span>';
+  const pill = s => `<span class="pill ${s}"><i></i>${STATUS[s].label}</span>`;
+  const typeRu = (t, cat) => cat === 'analytic' ? 'Аналитический' : t === 'Passport' ? 'Паспорт' : 'Сводный';
+  const roleRu = r => r === 'tester' ? 'тестировщик' : 'разработчик';
+  const docSec = r => r.loadSec ?? (r.endAt ? (ts(r.endAt) - ts(r.startAt)) / 1000 : null);
+  const firstName = n => (n || '').split(' ')[0];
+  const isDev = () => !!S.me && (S.me.role === 'dev' || S.me.isAdmin);
+  const shortGuid = g => g ? g.slice(0, 8) + '…' : '';
+  const psLabel = ps => ps ? `набор ${ps}` : 'BatchRun';
+
+  const I = {
+    upload: '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>',
+    up16: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 18v2h16v-2"/></svg>',
+    search: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>',
+    dl: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>',
+    moon: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>',
+    sun: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+    x: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    refresh: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg>',
+    left: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg>',
+    right: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg>',
+    check: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+    flag: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4h11l-2 4 2 4H5"/></svg>',
+    key: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3"/></svg>',
+    out: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h11"/></svg>',
+    table: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></svg>',
+    logo: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 12.5l4 4L18 8"/></svg>',
+    copy: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h9"/></svg>',
+    rerun: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0 1 14-5.3L20 9M20 4v5h-5M20 12a8 8 0 0 1-14 5.3L4 15M4 20v-5h5"/></svg>',
+    server: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>',
+    mute: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg>',
+  };
+
+  function toast(msg, err) {
+    const t = document.createElement('div');
+    t.className = 'toast' + (err ? ' err' : '');
+    t.innerHTML = (err ? '' : I.check) + `<span>${esc(msg)}</span>`;
+    $('#toasts').appendChild(t);
+    setTimeout(() => t.remove(), err ? 7000 : 3200);
+  }
+  async function safe(fn, okMsg) {
+    try { const r = await fn(); if (okMsg) toast(okMsg); return r; }
+    catch (e) { console.error(e); toast(e.message || String(e), true); return undefined; }
+  }
+  function downloadText(name, text, mime) {
+    const blob = new Blob([text], { type: mime || 'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+  const stamp = () => { const d = new Date(); return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`; };
+  const pref = (k, def) => { try { const v = localStorage.getItem(k); return v === null ? def : v; } catch { return def; } };
+  const setPref = (k, v) => { try { localStorage.setItem(k, v); } catch { } };
+
+  // =====================================================================================================================
+  // тема
+  function applyTheme() {
+    let t = pref('theme', null);
+    if (!t) t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    document.documentElement.dataset.theme = t;
+  }
+  function toggleTheme() {
+    setPref('theme', document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+    applyTheme();
+    renderShell();
+  }
+
+  // =====================================================================================================================
+  // алгоритмы: «пока не правим» и исправления
+  const ignored = name => !!(name && S.flags.get(name) && S.flags.get(name).ignored);
+  // ошибки прогона без учёта алгоритмов «пока не правим»
+  function effErrors(r) {
+    if (!r.errAlgs) return { eff: r.errorCount, ign: 0, algs: [] };   // старые записи без списка алгоритмов
+    const eff = r.errAlgs.filter(a => !ignored(a));
+    return { eff: eff.length, ign: r.errAlgs.length - eff.length, algs: [...new Set(eff.filter(Boolean))] };
+  }
+  // исправлен ли алгоритм после прогона: deployed — новая версия уже на сервере (можно перепрогонять), pending — исправлен, ждёт выкладки
+  function algFix(name, runAt) {
+    const vs = S.versions.get(name);
+    if (!vs) return null;
+    const t = ts(runAt);
+    let res = null;
+    for (const v of vs) {
+      if (!v.deployId) { res = res || 'pending'; continue; }
+      const d = S.deployById.get(v.deployId);
+      if (d && ts(d.at) > t) return 'deployed';
+    }
+    return res;
+  }
+  function fixOf(algs, runAt) {
+    let res = null;
+    for (const a of algs) { const f = algFix(a, runAt); if (f === 'deployed') return 'deployed'; if (f) res = f; }
+    return res;
+  }
+  function verInfo(name) {
+    const vs = S.versions.get(name);
+    if (!vs || !vs.length) return null;
+    const last = vs[vs.length - 1];
+    const pending = vs.some(v => !v.deployId);
+    const dep = !pending && S.deployById.get(last.deployId);
+    return { last, pending, deploy: dep || null, notes: vs.map(v => `v${v.version}${v.note ? ': ' + v.note : ''}`).join('\n') };
+  }
+
+  // =====================================================================================================================
+  // данные
+  const unitKey = (guid, ps) => (guid || '') + '|' + (ps || '');
+
+  function docState(list) {
+    const fins = list.filter(r => r.finished);
+    const fin = fins[fins.length - 1] || null;
+    const last = list[list.length - 1] || null;
+    const st = { runs: list.length, fin, last, status: 'pending', errors: 0, ignored: 0, errAlgs: [], fix: null, sec: null,
+      lastRunAt: last ? last.startAt : null, firstDoneAt: fins.length ? fins[0].startAt : null, running: null };
+    if (fin) {
+      const e = effErrors(fin);
+      Object.assign(st, { errors: e.eff, ignored: e.ign, errAlgs: e.algs, status: e.eff ? 'errors' : 'ok', sec: docSec(fin) });
+      if (e.eff) st.fix = fixOf(e.algs, fin.startAt);
+    } else if (last) {
+      st.status = 'interrupted';
+      st.running = last.running && last.running.length ? last.running.join(', ') : null;
+    }
+    return st;
+  }
+
+  function agg2(docs) {
+    const a = { total: docs.length, ok: 0, errors: 0, interrupted: 0, pending: 0, errSum: 0, ignSum: 0, secs: [], lastRunAt: null, firstDoneAt: null, fixDeployed: 0, fixPending: 0 };
+    for (const d of docs) {
+      a[d.st.status]++;
+      a.errSum += d.st.errors;
+      a.ignSum += d.st.ignored;
+      if (d.st.sec != null) a.secs.push(d.st.sec);
+      if (d.st.lastRunAt && ts(d.st.lastRunAt) > ts(a.lastRunAt)) a.lastRunAt = d.st.lastRunAt;
+      if (d.st.fix === 'deployed') a.fixDeployed++; else if (d.st.fix === 'pending') a.fixPending++;
+    }
+    a.done = a.ok + a.errors;
+    a.remaining = a.pending + a.interrupted;
+    a.status = !a.total ? null : !a.remaining ? (a.errors ? 'errors' : 'ok') : !a.done ? (a.interrupted ? 'interrupted' : 'pending') : 'partial';
+    return a;
+  }
+
+  async function loadState() {
+    const [users, kinds, runs, uploads, instances, meta] = await Promise.all([DB.users(), DB.kinds(), DB.runsLight(), DB.uploads(), DB.instances(), DB.algMeta()]);
+    S.users = users;
+    S.uploadsList = uploads;
+    S.runs = runs;
+    S.instances = instances;
+    S.flags = new Map(meta.flags.map(f => [f.name, f]));
+    S.deploys = meta.deploys.slice().sort((a, b) => b.id - a.id);
+    S.deployById = new Map(meta.deploys.map(d => [d.id, d]));
+    S.versions = new Map();
+    meta.versions.slice().sort((a, b) => a.id - b.id).forEach(v => { if (!S.versions.has(v.name)) S.versions.set(v.name, []); S.versions.get(v.name).push(v); });
+    S.pendingVers = meta.versions.filter(v => !v.deployId);
+    S.links = new Set(kinds.flatMap(k => k.linkAlgs || []).map(a => a.toLowerCase()));
+
+    const cmp = (a, b) => ts(a.startAt) - ts(b.startAt) || a.uploadId - b.uploadId || a.id - b.id;
+    const byUnit = new Map();
+    const push = (key, r) => { if (!byUnit.has(key)) byUnit.set(key, []); byUnit.get(key).push(r); };
+    for (const r of runs) if (r.kindCode) push(r.guid ? unitKey(r.guid, r.ps) : 'k:' + r.kindCode, r);
+    byUnit.forEach(l => l.sort(cmp));
+    const instByKind = new Map();
+    for (const x of instances) { if (!instByKind.has(x.kindCode)) instByKind.set(x.kindCode, []); instByKind.get(x.kindCode).push(x); }
+
+    const secs = [];
+    S.kinds = kinds.map(k => {
+      const l1 = (k.guid ? (byUnit.get(unitKey(k.guid, '')) || []) : []).concat(byUnit.get('k:' + k.code) || []).sort(cmp);
+      const s1 = docState(l1);
+      if (s1.sec != null) secs.push(s1.sec);
+      const docs2 = (instByKind.get(k.code) || []).sort((a, b) => a.ord - b.ord)
+        .map(x => ({ ...x, st: docState(byUnit.get(unitKey(x.guid, x.ps)) || []) }));
+      return {
+        ...k, algCount: k.algorithms.length, s1,
+        status: l1.length ? s1.status : (k.guid ? 'pending' : 'noinstance'),
+        lastRunAt: s1.lastRunAt, docSec: s1.sec, errors: s1.errors, ignored: s1.ignored, fix: s1.fix,
+        warnings: s1.fin ? s1.fin.warnings : 0, runs: l1.length, finRunId: s1.fin ? s1.fin.id : null,
+        firstDoneAt: s1.firstDoneAt, running: s1.running,
+        docs2, s2: agg2(docs2),
+      };
+    });
+    S.avgDocSec = secs.length ? secs.reduce((a, b) => a + b, 0) / secs.length : null;
+    const sig = S.kinds.map(k => k.status + k.errors + (k.reviewStatus || '') + (k.review2Status || '') + (k.reviewComment || '').length + (k.assignee || '') + k.runs
+      + '/' + k.s2.done + k.s2.errSum + k.s2.interrupted).join('|') + '#' + uploads.length + '#' + meta.flags.map(f => f.name + f.ignored).join() + '#' + meta.versions.length + '#' + meta.deploys.length;
+    const changed = sig !== S.sig;
+    S.sig = sig;
+    return changed;
+  }
+
+  // этап человека: второй открывается, когда выполнено 100% документов первого
+  function stage1Left(login) {
+    const l = S.kinds.filter(k => k.assignee === login && k.guid);
+    return { total: l.length, left: l.filter(k => !(k.status === 'ok' || k.status === 'errors')).length };
+  }
+  const stage2Open = login => { const x = stage1Left(login); return x.total > 0 && x.left === 0; };
+  const hasStage2 = login => S.kinds.some(k => k.assignee === login && k.docs2.length);
+  function pageStage(page) {
+    if (page === 'my') return S.f.my.stage || (stage2Open(S.me.login) && hasStage2(S.me.login) ? 2 : 1);
+    if (page === 'all') return S.f.all.stage;
+    return 1;
+  }
+  const curStage = () => (S.route === 'my' || S.route === 'all') ? pageStage(S.route) : 1;
+
+  // строка таблицы для этапа: на втором — агрегат по экземплярам вида
+  function viewOf(k, stage) {
+    if (stage !== 2) return k;
+    const a = k.s2;
+    return {
+      ...k, status: a.status, errors: a.errSum, ignored: a.ignSum, docSec: a.secs.length ? a.secs.reduce((x, y) => x + y, 0) / a.secs.length : null,
+      lastRunAt: a.lastRunAt, running: null, progress: a,
+      fix: a.fixDeployed ? 'deployed' : a.fixPending ? 'pending' : null,
+      reviewStatus: k.review2Status, reviewComment: k.review2Comment, reviewBy: k.review2By, reviewAt: k.review2At,
+    };
+  }
+  const viewKinds = stage => stage === 2 ? S.kinds.filter(k => k.docs2.length).map(k => viewOf(k, 2)) : S.kinds;
+
+  function stats(list, stage) {
+    const s = { all: list.length, total: 0, ok: 0, errors: 0, partial: 0, interrupted: 0, pending: 0, noinstance: 0, reviewed: 0, issues: 0, secs: [] };
+    for (const k of list) {
+      if (stage === 2) {
+        const a = k.progress;
+        s.total += a.total; s.ok += a.ok; s.errors += a.errors; s.interrupted += a.interrupted; s.pending += a.pending;
+        s.secs.push(...a.secs);
+      } else {
+        s[k.status]++;
+        if (k.status !== 'noinstance') s.total++;
+        if (k.docSec != null) s.secs.push(k.docSec);
+      }
+      if (k.reviewStatus === 'ok') s.reviewed++;
+      if (k.reviewStatus === 'issue') s.issues++;
+    }
+    s.done = s.ok + s.errors;
+    s.remaining = s.pending + s.interrupted;
+    s.reviewable = list.filter(k => k.status === 'ok' || k.status === 'errors').length;
+    s.toReview = list.filter(k => (k.status === 'ok' || k.status === 'errors') && !k.reviewStatus).length;
+    s.pct = !s.total ? 0 : s.done === s.total ? 100 : Math.min(99, Math.round((s.done / s.total) * 100));
+    s.avg = s.secs.length >= 3 ? s.secs.reduce((a, b) => a + b, 0) / s.secs.length : S.avgDocSec;
+    s.eta = s.avg != null ? s.avg * s.remaining : null;
+    return s;
+  }
+
+  // документы человека для пакета: этап 1 — экземпляр вида, этап 2 — экземпляры второго этапа
+  function docsOf(login, stage) {
+    const mine = S.kinds.filter(k => k.assignee === login);
+    return stage === 2
+      ? mine.flatMap(k => k.docs2.map(d => ({ kind: k.code, doctype: d.doctype, guid: d.guid, ps: d.ps, st: d.st })))
+      : mine.filter(k => k.guid).map(k => ({ kind: k.code, doctype: k.doctype, guid: k.guid, ps: '', st: k.s1 }));
+  }
+  const remainingDocs = (login, stage) => docsOf(login, stage).filter(d => d.st.status === 'pending' || d.st.status === 'interrupted');
+  function errorDocs(login, stage) {
+    const e = docsOf(login, stage).filter(d => d.st.status === 'errors');
+    return { all: e, ready: e.filter(d => d.st.fix === 'deployed'), waiting: e.filter(d => d.st.fix === 'pending'), open: e.filter(d => !d.st.fix) };
+  }
+
+  // JSON пакета: группы (тип документа, набор параметров) в порядке, в котором их выполняет сервер; items — для сопоставления N/M протокола
+  function buildBatch(docs) {
+    const seen = new Set();
+    const list = docs.filter(d => { const k = unitKey(d.guid, d.ps); if (seen.has(k)) return false; seen.add(k); return true; })
+      .sort((a, b) => (a.doctype < b.doctype ? -1 : a.doctype > b.doctype ? 1 : 0) || ((a.ps || '') < (b.ps || '') ? -1 : (a.ps || '') > (b.ps || '') ? 1 : 0) || (a.guid < b.guid ? -1 : a.guid > b.guid ? 1 : 0));
+    const groups = [];
+    for (const d of list) {
+      const g = groups[groups.length - 1];
+      if (g && g.doctype === d.doctype && g.ps === (d.ps || '')) g.ids.push(d.guid);
+      else groups.push({ doctype: d.doctype, ps: d.ps || '', ids: [d.guid] });
+    }
+    const text = JSON.stringify({ documents: groups.map(g => ({ doctype: g.doctype, ids: g.ids, paramValueSetCode: g.ps || 'BatchRun' })) }, null, 4).replace(/\n/g, '\r\n') + '\r\n';
+    return { text, items: list.map(d => [d.doctype, d.guid, d.ps || '']), count: list.length };
+  }
+  async function downloadBatch(login, stage, docs, suffix) {
+    if (!docs.length) { toast('Нечего запускать'); return; }
+    const b = buildBatch(docs);
+    downloadText(`перепроверка_${userName(login)}${stage === 2 ? '_этап2' : ''}${suffix ? '_' + suffix : ''}_${stamp()}.txt`, b.text);
+    toast(`Скачан JSON: ${b.count} ${plural(b.count, 'документ', 'документа', 'документов')}`);
+    // порядок пакета запоминается: по номеру N/M в протоколе потом определяется набор параметров
+    try { await DB.saveBatch(S.me.login, stage, b.items); } catch (e) { console.warn('batch', e); }
+  }
+
+  function exportCsv(login) {
+    const q = s => '"' + String(s ?? '').replace(/"/g, '""') + '"';
+    const rows = [['Код вида', 'Наименование', 'Тип', 'Исполнитель', 'GUID экземпляра', 'Алгоритмов', 'Статус', 'Последний прогон', 'Время документа, с', 'Ошибок',
+      'Ошибок «не правим»', 'Проверка', 'Комментарий', 'Проверил', 'Этап 2: документов', 'Этап 2: выполнено', 'Этап 2: с ошибками', 'Этап 2: проверка'].map(q).join(';')];
+    S.kinds.filter(k => !login || k.assignee === login).forEach(k => rows.push([
+      q(k.code), q(k.name), q(typeRu(k.doctype, k.category)), q(k.assignee ? userName(k.assignee) : ''), q(k.guid), k.algCount, q(STATUS[k.status].label),
+      q(k.lastRunAt ? fmtDT(k.lastRunAt, true) : ''), k.docSec != null ? String(Math.round(k.docSec * 10) / 10).replace('.', ',') : '', k.errors, k.ignored,
+      q(k.reviewStatus === 'ok' ? 'Проверено' : k.reviewStatus === 'issue' ? 'Замечание' : ''), q(k.reviewComment), q(k.reviewBy ? userName(k.reviewBy) : ''),
+      k.s2.total, k.s2.done, k.s2.errors, q(k.review2Status === 'ok' ? 'Проверено' : k.review2Status === 'issue' ? 'Замечание: ' + (k.review2Comment || '') : ''),
+    ].join(';')));
+    downloadText(`перепроверка_${login ? userName(login) : 'все'}_${stamp()}.csv`, '﻿' + rows.join('\r\n') + '\r\n', 'text/csv;charset=utf-8');
+  }
+
+  // =====================================================================================================================
+  // вход
+  async function renderLogin(msg) {
+    let users = [];
+    try { users = await DB.users(); } catch (e) { msg = e.message; }
+    S.users = users;
+    let sel = pref('lastLogin', null);
+    if (!users.some(u => u.login === sel)) sel = null;
+    $('#app').innerHTML = `
+      <div class="login-wrap">
+        <div class="card login">
+          <div class="side">
+            <div class="brand"><span class="logo" style="background:rgba(255,255,255,.18);box-shadow:none">${I.logo}</span></div>
+            <h1>Перепроверка<br>ПКТС 2.0</h1>
+            <p>Общая доска команды: какие виды уже прогнаны, что упало, что осталось.</p>
+            <ul>
+              <li><span>1</span>Скачиваете JSON со своими документами и запускаете пакет</li>
+              <li><span>2</span>Бросаете протокол на сайт — выполненное отмечается само</li>
+              <li><span>3</span>Сервер упал? Скачиваете остаток — без уже выполненного</li>
+              <li><span>4</span>Сверяете результат и ставите «Проверено» или замечание</li>
+            </ul>
+          </div>
+          <div class="form">
+            <h2>Вход</h2>
+            <div class="sub">Выберите себя и введите пароль</div>
+            ${DB.demo ? '<div class="demo-note">Демо-режим: Supabase не подключён, данные хранятся только в этом браузере, пароль — любой.</div>' : ''}
+            <div class="people">
+              ${users.map(u => `<button type="button" class="pbtn ${u.login === sel ? 'on' : ''}" data-login="${esc(u.login)}">
+                ${avatar(u.login, u.name)}<span><div class="n">${esc(u.name)}</div><div class="r">${roleRu(u.role)}</div></span></button>`).join('')}
+            </div>
+            <form id="loginForm">
+              <input class="input" id="pw" type="password" placeholder="Пароль" autocomplete="current-password" style="width:100%;padding:11px 13px">
+              <div class="err" id="loginErr">${esc(msg || '')}</div>
+              <button class="btn primary" style="width:100%;padding:12px" type="submit">Войти</button>
+            </form>
+          </div>
+        </div>
+      </div>`;
+    $$('.pbtn').forEach(b => b.onclick = () => {
+      sel = b.dataset.login;
+      $$('.pbtn').forEach(x => x.classList.toggle('on', x === b));
+      $('#pw').focus();
+    });
+    $('#loginForm').onsubmit = async e => {
+      e.preventDefault();
+      if (!sel) { $('#loginErr').textContent = 'Выберите себя в списке'; return; }
+      const btn = e.target.querySelector('button');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spin"></span>';
+      try {
+        await DB.signIn(sel, $('#pw').value);
+        setPref('lastLogin', sel);
+        await boot();
+      } catch (err) {
+        $('#loginErr').textContent = err.message;
+        btn.disabled = false;
+        btn.textContent = 'Войти';
+      }
+    };
+    if (sel) $('#pw').focus();
+  }
+
+  async function boot() {
+    S.me = await DB.me();
+    if (!S.me) { renderLogin(); return; }
+    $('#app').innerHTML = '<div class="login-wrap"><span class="spin" style="width:28px;height:28px;border-width:3px"></span></div>';
+    try { await loadState(); } catch (e) { renderLogin('Не удалось загрузить данные: ' + e.message); return; }
+    $('#app').innerHTML = '';
+    route();
+  }
+
+  function route() {
+    const parts = location.hash.replace(/^#\/?/, '').split('/');
+    S.route = ['my', 'all', 'team', 'uploads', 'algs'].includes(parts[0]) ? parts[0] : 'my';
+    const kind = parts[1] === 'k' && parts[2] ? decodeURIComponent(parts[2]) : null;
+    const pageChanged = !$('#page') || $('#page').dataset.route !== S.route;
+    S.kindOpen = kind;
+    renderShell();
+    if (pageChanged || !kind) renderPage();
+    closeModal();
+    if (kind) openKind(kind); else closeDrawer(true);
+  }
+  const go = (r, kind) => { location.hash = '#/' + r + (kind ? '/k/' + encodeURIComponent(kind) : ''); };
+
+  // =====================================================================================================================
+  // каркас
+  function renderShell() {
+    if (!S.me) return;
+    const st = pageStage('my');
+    const ms = stats(viewKinds(st).filter(k => k.assignee === S.me.login), st);
+    const dark = document.documentElement.dataset.theme === 'dark';
+    const tab = (r, label, count, cls) => `<a href="#/${r}" class="${S.route === r ? 'active' : ''}">${label}${count ? `<span class="count ${cls || ''}">${count}</span>` : ''}</a>`;
+    let shell = $('#shell');
+    if (!shell) {
+      $('#app').innerHTML = `<div id="shell"></div><main class="page" id="page"></main><div id="overlay"></div>`;
+      shell = $('#shell');
+    }
+    shell.innerHTML = `
+      ${DB.demo ? '<div class="demo-bar">Демо-режим: данные хранятся только в этом браузере. Для работы команды подключите Supabase — см. README.</div>' : ''}
+      <header class="topbar"><div class="topbar-in">
+        <a class="brand" href="#/my" style="color:inherit;text-decoration:none"><span class="logo">${I.logo}</span><div>Перепроверка ПКТС 2.0<small>${S.kinds.length} видов · ${S.users.length} человек · время МСК</small></div></a>
+        <nav class="nav">
+          ${tab('my', 'Мои виды', ms.remaining)}
+          ${tab('all', 'Все виды')}
+          ${tab('team', 'Команда')}
+          ${tab('uploads', 'Протоколы', S.uploadsList.length)}
+          ${tab('algs', 'Алгоритмы', isDev() && S.pendingVers.length ? S.pendingVers.length : 0)}
+        </nav>
+        <button class="btn ghost icon hide-sm" data-act="refresh" title="Обновить данные">${I.refresh}</button>
+        <button class="btn ghost icon" data-act="theme" title="Светлая / тёмная тема">${dark ? I.sun : I.moon}</button>
+        <div class="userbox">
+          <button class="btn ghost" data-act="menu" style="padding:4px 10px 4px 4px">${avatar(S.me.login, S.me.name)}<span class="hide-sm">${esc(S.me.name)}</span></button>
+          ${S.menu ? `<div class="menu">
+            <div class="head">${avatar(S.me.login, S.me.name)}<div><b>${esc(S.me.name)}</b><div class="muted" style="font-size:12.5px">${roleRu(S.me.role)}${S.me.isAdmin ? ' · администратор' : ''}</div></div></div>
+            ${DB.demo ? '' : `<button data-act="pw">${I.key}Сменить пароль</button>`}
+            <button data-act="csvAll">${I.table}Все виды в Excel (CSV)</button>
+            <button data-act="logout">${I.out}Выйти</button>
+          </div>` : ''}
+        </div>
+      </div></header>`;
+  }
+
+  function renderPage() {
+    const p = $('#page');
+    if (!p) return;
+    p.dataset.route = S.route;
+    if (S.route === 'my') p.innerHTML = pageMy();
+    else if (S.route === 'all') p.innerHTML = pageAll();
+    else if (S.route === 'team') { p.innerHTML = pageTeam(); loadEvents(); }
+    else if (S.route === 'uploads') p.innerHTML = pageUploads();
+    else if (S.route === 'algs') { p.innerHTML = pageAlgs(); loadAlgs(); }
+    bindDrops();
+  }
+
+  // =====================================================================================================================
+  // компоненты
+  function donut(s, size = 132, stroke = 13) {
+    const r = (size - stroke) / 2, c = 2 * Math.PI * r, t = s.total || 1;
+    let off = 0;
+    const seg = (n, col) => {
+      if (!n) return '';
+      const len = (n / t) * c;
+      const el = `<circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${col}" stroke-width="${stroke}" stroke-dasharray="${len} ${c - len}" stroke-dashoffset="${-off}" stroke-linecap="butt"/>`;
+      off += len;
+      return el;
+    };
+    return `<div class="donut" style="width:${size}px;height:${size}px">
+      <svg width="${size}" height="${size}"><circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="var(--surface-3)" stroke-width="${stroke}"/>
+        ${seg(s.ok, 'var(--ok)')}${seg(s.errors, 'var(--err)')}${seg(s.interrupted, 'var(--int)')}</svg>
+      <div class="c"><div><b>${s.pct}%</b><span>выполнено</span></div></div></div>`;
+  }
+
+  function progressBar(s, thin) {
+    const t = s.total || 1;
+    const seg = k => s[k] ? `<div title="${STATUS[k].many}: ${s[k]}" style="width:${(s[k] / t) * 100}%;background:${STATUS[k].color}"></div>` : '';
+    return `<div class="progress ${thin ? 'thin' : ''}">${seg('ok')}${seg('errors')}${seg('interrupted')}</div>`;
+  }
+
+  function hero(s, page, title, lead, stage) {
+    const f = S.f[page];
+    const sp = (key, n, label, col) => `<button class="stat-pill ${f.status === key ? 'sel' : ''}" data-act="status" data-page="${page}" data-key="${key}">
+      <span class="dot" style="background:${col}"></span><b>${n}</b><span class="muted">${label}</span></button>`;
+    const lastUp = S.uploadsList[0];
+    return `<div class="card hero">
+      ${donut(s)}
+      <div>
+        <h2>${title}${stage === 2 ? ' <span class="stage-chip">этап 2</span>' : ''}</h2>
+        <div class="lead">${lead}</div>
+        <div class="hero-stats">
+          ${sp('ok', s.ok, 'выполнено', 'var(--ok)')}
+          ${sp('errors', s.errors, 'с ошибками', 'var(--err)')}
+          ${sp('interrupted', s.interrupted, 'прервано', 'var(--int)')}
+          ${sp('pending', s.pending, 'не выполнялось', 'var(--pend)')}
+          ${sp('unreviewed', s.toReview, 'ждут проверки', 'var(--rev)')}
+          ${s.issues ? sp('issue', s.issues, 'с замечаниями', 'var(--issue)') : ''}
+        </div>
+        <div class="hero-meta">
+          <span>Проверено вручную: <b>${s.reviewed} из ${s.reviewable}</b> ${plural(s.reviewable, 'вида', 'видов', 'видов')}</span>
+          <span>Средний документ: <b>${fmtSec(s.avg)}</b></span>
+          <span>Осталось примерно: <b>${s.eta != null && s.remaining ? fmtSec(s.eta) : s.remaining ? '—' : 'ничего 🎉'}</b></span>
+          ${lastUp ? `<span>Последний протокол: <b>${ago(lastUp.at)}</b> · ${esc(userName(lastUp.by))}</span>` : ''}
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // переключатель этапов
+  function stageBar(page, login) {
+    const st = pageStage(page);
+    const l1 = stage1Left(login || S.me.login);
+    const open = page === 'all' || (l1.total > 0 && l1.left === 0);
+    const has2 = page === 'all' ? S.kinds.some(k => k.docs2.length) : hasStage2(login);
+    if (!has2) return '';
+    const n2 = page === 'all' ? S.kinds.reduce((a, k) => a + k.docs2.length, 0) : docsOf(login, 2).length;
+    return `<div class="stagebar">
+      <div class="seg">
+        <button class="${st === 1 ? 'on' : ''}" data-act="stage" data-page="${page}" data-st="1">Этап 1 · по одному документу</button>
+        <button class="${st === 2 ? 'on' : ''}" data-act="stage" data-page="${page}" data-st="2" ${open ? '' : 'disabled'}>Этап 2 · ${n2} ${plural(n2, 'документ', 'документа', 'документов')}${open ? '' : ' 🔒'}</button>
+      </div>
+      <span class="hint">${open ? `Этап 2: ${STAGE2_INFO}.` : `Этап 2 откроется, когда будет выполнено 100% первого — осталось ${l1.left} ${plural(l1.left, 'документ', 'документа', 'документов')}.`}</span>
+    </div>`;
+  }
+
+  function steps(login, s, stage) {
+    const n = s.remaining;
+    const mine = login === S.me.login;
+    const ed = errorDocs(login, stage);
+    const why = !ed.all.length ? 'Документов с ошибками нет.'
+      : ed.ready.length ? `Исправлено и выложено на сервер: <b style="color:var(--text)">${ed.ready.length}</b> из ${ed.all.length} с ошибками.${ed.waiting.length ? ` Ещё ${ed.waiting.length} — исправлены, ждут выкладки.` : ''}`
+        : ed.waiting.length ? `Алгоритмы ${ed.waiting.length} ${plural(ed.waiting.length, 'документа', 'документов', 'документов')} уже исправлены, но ещё не залиты на сервер — кнопка откроется, когда разработчик подтвердит выкладку.`
+          : `Ошибки в ${ed.all.length} ${plural(ed.all.length, 'документе', 'документах', 'документах')} ещё не исправлены — кнопка откроется после исправления и выкладки алгоритмов.`;
+    return `<div class="steps">
+      <div class="card step ${s.remaining === 0 && s.total ? 'done' : ''}">
+        <div class="t"><span class="n">1</span>Скачайте пакет${stage === 2 ? ' этапа 2' : ''}</div>
+        <div class="d">${n ? `JSON только с тем, что ещё не выполнилось — <b style="color:var(--text)">${n} ${plural(n, 'документ', 'документа', 'документов')}</b>. После падения сервера просто скачайте его заново.` : 'Все документы выполнены — запускать нечего.'}</div>
+        <div class="acts">
+          <button class="btn primary" data-act="dlRemaining" data-login="${esc(login)}" data-st="${stage}" ${n ? '' : 'disabled'}>${I.dl}JSON остатка</button>
+          <button class="btn" data-act="dlErrors" data-login="${esc(login)}" data-st="${stage}" ${ed.ready.length ? '' : 'disabled'} title="Перепрогон документов, у которых алгоритмы с ошибками исправлены и выложены на сервер">${I.rerun}JSON с ошибками${ed.ready.length ? ` (${ed.ready.length})` : ''}</button>
+          <button class="btn small ghost" data-act="dlFull" data-login="${esc(login)}" data-st="${stage}" title="Все назначенные документы этапа">полный JSON</button>
+          <button class="btn small ghost" data-act="dlCsv" data-login="${esc(login)}">таблица CSV</button>
+        </div>
+        <div class="why">${why}</div>
+      </div>
+      <div class="card step">
+        <div class="t"><span class="n">2</span>Запустите в ПКТС 2.0</div>
+        <div class="d">«Пакетное выполнение алгоритмов актуализации» → загрузите скачанный файл. Набор параметров уже указан в JSON${stage === 2 ? ' (для аналитических — свой набор у каждого документа)' : ''}:</div>
+        <div class="copybox"><span style="flex:1">"paramValueSetCode": "${stage === 2 ? 'BatchRun / код набора' : 'BatchRun'}"</span></div>
+        <div class="d" style="flex:0">Когда пакет закончится (или сервер упадёт) — сохраните протокол в .txt.</div>
+      </div>
+      <div class="card step">
+        <div class="t"><span class="n">3</span>Загрузите протокол</div>
+        <div class="d">Перетащите файл <b style="color:var(--text)">в любое место окна</b> или выберите вручную. Выполненное отметится само у владельца вида — даже если протокол загрузил кто-то другой.</div>
+        <div class="acts">
+          <button class="btn primary" data-act="pickFiles">${I.up16}Выбрать протоколы</button>
+          ${mine && s.toReview ? `<button class="btn" data-act="startReview">${I.check}Проверить результаты (${s.toReview})</button>` : ''}
+        </div>
+      </div>
+    </div>`;
+  }
+
+  function filterKinds(list, f) {
+    const q = f.q.trim().toLowerCase();
+    return list.filter(k => {
+      if (f.status !== 'all') {
+        if (f.status === 'issue') { if (k.reviewStatus !== 'issue') return false; }
+        else if (f.status === 'reviewed') { if (k.reviewStatus !== 'ok') return false; }
+        else if (f.status === 'unreviewed') { if (!(k.status === 'ok' || k.status === 'errors') || k.reviewStatus) return false; }
+        else if (f.status === 'fixed') { if (k.fix !== 'deployed') return false; }
+        else if (k.status !== f.status) return false;
+      }
+      if (f.type !== 'all') { if (f.type === 'analytic' ? k.category !== 'analytic' : (k.doctype !== f.type || k.category === 'analytic')) return false; }
+      if (f.who && f.who !== 'all') { if (f.who === 'none' ? k.assignee : k.assignee !== f.who) return false; }
+      if (q && !(k.code.toLowerCase().includes(q) || (k.name || '').toLowerCase().includes(q) || (k.guid || '').includes(q)
+        || k.algorithms.some(a => a.toLowerCase().includes(q)) || k.docs2.some(d => d.guid.includes(q)))) return false;
+      return true;
+    });
+  }
+
+  function toolbar(page, list) {
+    const f = S.f[page];
+    const cnt = key => key === 'all' ? list.length
+      : key === 'reviewed' ? list.filter(k => k.reviewStatus === 'ok').length
+        : key === 'issue' ? list.filter(k => k.reviewStatus === 'issue').length
+          : key === 'unreviewed' ? list.filter(k => (k.status === 'ok' || k.status === 'errors') && !k.reviewStatus).length
+            : key === 'fixed' ? list.filter(k => k.fix === 'deployed').length
+              : list.filter(k => k.status === key).length;
+    const b = (key, label, col) => `<button class="${f.status === key ? 'on' : ''}" data-act="status" data-page="${page}" data-key="${key}">
+      ${col ? `<span class="dot" style="background:${col}"></span>` : ''}${label}<span class="n">${cnt(key)}</span></button>`;
+    return `<div class="toolbar">
+      <div class="search">${I.search}<input class="input" id="q-${page}" data-act="q" data-page="${page}" placeholder="Код, наименование, GUID, алгоритм" value="${esc(f.q)}"><kbd class="hide-sm">/</kbd></div>
+      <select class="input" data-act="type" data-page="${page}">
+        <option value="all">Все типы</option>
+        <option value="Passport" ${f.type === 'Passport' ? 'selected' : ''}>Паспорта</option>
+        <option value="SummaryDocument" ${f.type === 'SummaryDocument' ? 'selected' : ''}>Сводные</option>
+        <option value="analytic" ${f.type === 'analytic' ? 'selected' : ''}>Аналитические</option>
+      </select>
+      ${page === 'all' ? `<select class="input" data-act="who" data-page="all">
+        <option value="all">Все исполнители</option>
+        ${S.users.map(u => `<option value="${esc(u.login)}" ${f.who === u.login ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}
+        <option value="none" ${f.who === 'none' ? 'selected' : ''}>Без исполнителя</option>
+      </select>` : ''}
+    </div>
+    <div class="seg" style="margin-bottom:12px">
+      ${b('all', 'Все')}${b('pending', 'Не выполнялись', 'var(--pend)')}${list.some(k => k.status === 'partial') ? b('partial', 'Частично', 'var(--accent)') : ''}${b('interrupted', 'Прерваны', 'var(--int)')}${b('errors', 'С ошибками', 'var(--err)')}${b('ok', 'Выполнены', 'var(--ok)')}
+      ${list.some(k => k.fix === 'deployed') ? b('fixed', 'Исправлены — перепрогнать', 'var(--rev)') : ''}
+      ${b('unreviewed', 'Ждут проверки', 'var(--rev)')}${b('issue', 'Замечания', 'var(--issue)')}${b('reviewed', 'Проверены', 'var(--rev)')}
+      ${list.some(k => k.status === 'noinstance') ? b('noinstance', 'Нет экземпляра', 'var(--noi)') : ''}
+    </div>`;
+  }
+
+  function sortKinds(list, page) {
+    const { key, dir } = S.sort[page];
+    const v = k => {
+      switch (key) {
+        case 'status': return ORDER.indexOf(k.status) * 10 + (k.reviewStatus === 'issue' ? 0 : k.reviewStatus ? 2 : 1);
+        case 'assignee': return k.assignee ? userName(k.assignee) : 'яя';
+        case 'algCount': return k.progress ? k.progress.total : k.algCount;
+        case 'lastRunAt': return ts(k.lastRunAt);
+        case 'docSec': return k.docSec ?? -1;
+        case 'errors': return k.errors;
+        case 'review': return k.reviewStatus === 'issue' ? 0 : k.reviewStatus === 'ok' ? 2 : 1;
+        case 'name': return (k.name || '').toLowerCase();
+        case 'type': return k.doctype;
+        default: return k.code;
+      }
+    };
+    return list.slice().sort((a, b) => { const x = v(a), y = v(b); return x < y ? -dir : x > y ? dir : (a.code < b.code ? -1 : 1); });
+  }
+
+  // подпись под статусом: исправлено / ждёт выкладки / ошибки «не правим» / обрыв
+  function statusNote(k) {
+    if (k.status === 'errors' || k.status === 'partial') {
+      if (k.fix === 'deployed') return `<div class="sub-line" style="color:var(--rev)">исправлено — перепрогнать</div>`;
+      if (k.fix === 'pending') return `<div class="sub-line" style="color:var(--int)">исправлено, ждёт выкладки</div>`;
+    }
+    if (k.running) return `<div class="sub-line" title="${esc(k.running)}">обрыв: ${esc(k.running.split(',')[0])}</div>`;
+    if (k.ignored && !k.errors && (k.status === 'ok')) return `<div class="sub-line" title="Ошибки в алгоритмах, отмеченных «пока не правим»">«не правим»: ${k.ignored}</div>`;
+    return '';
+  }
+
+  function kindsTable(list, page) {
+    const showWho = page === 'all';
+    const bulk = page === 'all' && S.me.isAdmin;
+    const stage = pageStage(page);
+    const s = S.sort[page];
+    const th = (key, label, cls = '') => `<th class="${cls}" data-act="sort" data-page="${page}" data-key="${key}">${label}${s.key === key ? `<span class="arr">${s.dir > 0 ? '↑' : '↓'}</span>` : ''}</th>`;
+    const rows = sortKinds(list, page);
+    S.nav = rows.map(k => k.code);
+    if (!rows.length) return `<div class="card"><div class="empty"><div class="ico">🔎</div>Ничего не найдено — измените фильтр или поиск</div></div>`;
+    const allSel = bulk && rows.every(k => S.selected.has(k.code));
+    const mini = a => `<div class="mini-progress">${progressBar(a, true)}<span>${a.done}/${a.total}</span></div>`;
+    return `<div class="card table-wrap"><table class="t">
+      <thead><tr>
+        ${bulk ? `<th class="nosort" style="width:36px"><input type="checkbox" data-act="selAll" ${allSel ? 'checked' : ''} title="Выбрать все показанные"></th>` : ''}
+        ${th('status', 'Статус')}${th('code', 'Код вида')}${th('name', 'Наименование')}
+        ${showWho ? th('assignee', 'Исполнитель') : ''}
+        ${th('algCount', stage === 2 ? 'Док.' : 'Алг.', 'num')}${th('lastRunAt', 'Прогон')}${th('docSec', 'Время', 'num')}${th('errors', 'Ошибок', 'num')}${th('review', 'Проверка')}
+      </tr></thead>
+      <tbody>${rows.map(k => `<tr data-kind="${esc(k.code)}" class="${S.selected.has(k.code) ? 'sel' : ''}">
+        ${bulk ? `<td data-stop="1"><input type="checkbox" data-act="sel" data-code="${esc(k.code)}" ${S.selected.has(k.code) ? 'checked' : ''}></td>` : ''}
+        <td>${pill(k.status)}${stage === 2 ? mini(k.progress) : ''}${statusNote(k)}</td>
+        <td class="code">${esc(k.code)}<div class="type">${typeRu(k.doctype, k.category)}</div></td>
+        <td class="name"><div class="nm">${esc(k.name) || '<span class="faint">—</span>'}</div></td>
+        ${showWho ? `<td>${who(k.assignee)}</td>` : ''}
+        <td class="num muted">${stage === 2 ? k.progress.total : k.algCount}</td>
+        <td class="nowrap muted" title="${k.lastRunAt ? fmtDT(k.lastRunAt, true) : ''}">${k.lastRunAt ? ago(k.lastRunAt) : '—'}</td>
+        <td class="num">${k.docSec != null ? fmtSec(k.docSec) : '<span class="faint">—</span>'}</td>
+        <td class="num">${k.errors ? `<span class="errn">${k.errors}</span>` : (k.status === 'ok' ? '<span class="faint">0</span>' : '<span class="faint">—</span>')}</td>
+        <td>${k.reviewStatus === 'ok' ? `<span class="pill rev">${I.check}Проверено</span>` : k.reviewStatus === 'issue' ? `<span class="pill issue" title="${esc(k.reviewComment)}">${I.flag}Замечание</span>` : (k.status === 'ok' || k.status === 'errors') ? '<span class="pill plain">ждёт</span>' : '<span class="faint">—</span>'}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>
+    ${bulk && S.selected.size ? `<div class="bulkbar">Выбрано: <b>${S.selected.size}</b>
+      <span style="margin-left:8px">Назначить:</span>
+      <select class="input" id="bulkTo">${S.users.map(u => `<option value="${esc(u.login)}">${esc(u.name)}</option>`).join('')}<option value="">— без исполнителя —</option></select>
+      <button class="btn primary small" data-act="bulkAssign">Применить</button>
+      <button class="btn small" data-act="bulkClear">Снять выбор</button></div>` : ''}`;
+  }
+
+  // =====================================================================================================================
+  // страницы
+  const myList = () => { const st = pageStage('my'); return viewKinds(st).filter(k => k.assignee === S.me.login); };
+
+  function pageMy() {
+    const stage = pageStage('my');
+    const mine = myList();
+    const s = stats(mine, stage);
+    const lead = !s.total ? (stage === 2 ? 'Для ваших видов нет документов второго этапа.' : 'На вас пока ничего не назначено.')
+      : s.remaining ? `Осталось выполнить <b style="color:var(--text)">${s.remaining}</b> из ${s.total} ${plural(s.total, 'документа', 'документов', 'документов')}${s.toReview ? `, ждут вашей проверки — <b style="color:var(--text)">${s.toReview}</b> ${plural(s.toReview, 'вид', 'вида', 'видов')}` : ''}.`
+        : s.toReview ? `Все документы выполнены. Осталось проверить результаты — <b style="color:var(--text)">${s.toReview}</b> ${plural(s.toReview, 'вид', 'вида', 'видов')}.`
+          : stage === 1 && hasStage2(S.me.login) ? 'Этап 1 выполнен полностью — открыт этап 2 🎉' : 'Всё выполнено и проверено. Отличная работа!';
+    return `
+      ${stageBar('my', S.me.login)}
+      ${hero(s, 'my', `${esc(firstName(S.me.name))}, ваши виды`, lead, stage)}
+      ${steps(S.me.login, s, stage)}
+      ${toolbar('my', mine)}
+      <div id="tbl">${kindsTable(filterKinds(mine, S.f.my), 'my')}</div>`;
+  }
+
+  const scopeAll = () => { const f = S.f.all; return viewKinds(f.stage).filter(k => f.who === 'all' || (f.who === 'none' ? !k.assignee : k.assignee === f.who)); };
+
+  function pageAll() {
+    const f = S.f.all;
+    const scope = scopeAll();
+    const s = stats(scope, f.stage);
+    const title = f.who === 'all' ? 'Все виды' : f.who === 'none' ? 'Без исполнителя' : `Виды: ${esc(userName(f.who))}`;
+    const lead = `${scope.length} ${plural(scope.length, 'вид', 'вида', 'видов')}${f.who === 'all' ? ` у ${S.users.length} человек` : ''} · выполнено ${s.done} из ${s.total} ${plural(s.total, 'документа', 'документов', 'документов')}`;
+    return `
+      ${stageBar('all')}
+      ${hero(s, 'all', title, lead, f.stage)}
+      ${f.who !== 'all' && f.who !== 'none' ? steps(f.who, s, f.stage) : ''}
+      ${toolbar('all', scope)}
+      <div id="tbl">${kindsTable(filterKinds(viewKinds(f.stage), f), 'all')}</div>`;
+  }
+
+  function teamChart() {
+    // накопленное число выполненных видов по людям во времени
+    const pts = S.kinds.filter(k => k.firstDoneAt && k.assignee).map(k => ({ t: ts(k.firstDoneAt), who: k.assignee })).sort((a, b) => a.t - b.t);
+    if (pts.length < 2) return '<div class="empty"><div class="ico">📈</div>График появится после загрузки протоколов</div>';
+    const W = 760, H = 240, L = 36, R = 12, T = 12, B = 26;
+    const t0 = pts[0].t, t1 = Math.max(pts[pts.length - 1].t, t0 + 60000);
+    const maxY = Math.max(...S.users.map(u => S.kinds.filter(k => k.assignee === u.login && k.status !== 'noinstance').length), 1);
+    const x = t => L + ((t - t0) / (t1 - t0)) * (W - L - R);
+    const y = v => T + (1 - v / maxY) * (H - T - B);
+    const lines = S.users.map(u => {
+      let c = 0;
+      const p = [[x(t0), y(0)]];
+      pts.filter(q => q.who === u.login).forEach(q => { p.push([x(q.t), y(c)]); c++; p.push([x(q.t), y(c)]); });
+      p.push([x(t1), y(c)]);
+      return `<polyline fill="none" stroke="${color(u.login)}" stroke-width="2.4" stroke-linejoin="round" points="${p.map(a => a.map(v => v.toFixed(1)).join(',')).join(' ')}"/>`;
+    }).join('');
+    const ticks = [0, .25, .5, .75, 1].map(f => Math.round(f * maxY));
+    const grid = [...new Set(ticks)].map(v => `<line class="grid-l" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v}</text>`).join('');
+    const xt = [0, .5, 1].map(f => { const t = t0 + f * (t1 - t0); return `<text x="${x(t)}" y="${H - 6}" text-anchor="${f === 0 ? 'start' : f === 1 ? 'end' : 'middle'}">${fmtDT(t)}</text>`; }).join('');
+    return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${grid}${xt}${lines}</svg>
+      <div class="legend">${S.users.map(u => `<span><i class="sw" style="background:${color(u.login)}"></i>${esc(u.name)}</span>`).join('')}</div>`;
+  }
+
+  function pageTeam() {
+    const total = stats(S.kinds, 1);
+    const cards = S.users.map(u => {
+      const s = stats(S.kinds.filter(k => k.assignee === u.login), 1);
+      const open2 = stage2Open(u.login) && hasStage2(u.login);
+      const s2 = open2 ? stats(viewKinds(2).filter(k => k.assignee === u.login), 2) : null;
+      return `<div class="card person" data-act="person" data-login="${esc(u.login)}" title="Открыть виды: ${esc(u.name)}">
+        <div class="top">${avatar(u.login, u.name)}<div><div class="nm">${esc(u.name)}</div><div class="rl">${roleRu(u.role)} · ${s.total} ${plural(s.total, 'вид', 'вида', 'видов')}</div></div>
+          <div class="pct"><b>${s.pct}%</b><div class="muted" style="font-size:11.5px">этап 1</div></div></div>
+        ${progressBar(s)}
+        <div class="stats">
+          <div><div class="v" style="color:var(--ok)">${s.ok}</div><div class="l">выполнено</div></div>
+          <div><div class="v" style="color:var(--err)">${s.errors}</div><div class="l">с ошибками</div></div>
+          <div><div class="v" style="color:var(--int)">${s.interrupted}</div><div class="l">прервано</div></div>
+          <div><div class="v">${s.pending}</div><div class="l">осталось</div></div>
+        </div>
+        ${s2 ? `<div style="margin-top:12px"><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px"><span class="stage-chip">этап 2</span><span class="muted"><b style="color:var(--text)">${s2.done}</b> из ${s2.total} · ${s2.pct}%</span></div>${progressBar(s2, true)}</div>` : ''}
+        <div class="foot"><span>Проверено <b>${s.reviewed}</b>${s.issues ? ` · замечаний <b style="color:var(--issue)">${s.issues}</b>` : ''}</span>
+          <span>≈ <b>${s.eta != null && s.remaining ? fmtSec(s.eta) : s.remaining ? '—' : s2 && s2.remaining ? fmtSec(s2.eta) : 'готово'}</b></span></div>
+      </div>`;
+    }).join('');
+    return `
+      ${hero(total, 'all', 'Команда', `${S.users.length} человек · ${total.total} документов к проверке на этапе 1 · выполнено ${total.done}`)}
+      <div class="team section-gap">${cards}</div>
+      <div class="two">
+        <div class="card card-pad"><h3>Динамика: выполнено видов</h3>${teamChart()}</div>
+        <div class="card card-pad"><h3>Лента событий</h3><div class="feed" id="feed">${'<div class="skel" style="margin:10px 0"></div>'.repeat(5)}</div></div>
+      </div>`;
+  }
+
+  async function loadEvents() {
+    const ev = await safe(() => DB.events(200));
+    const el = $('#feed');
+    if (!el || !ev) return;
+    el.innerHTML = ev.length ? ev.map(e => `<div class="ev">${S.users.some(u => u.login === e.by) ? avatar(e.by) : '<span class="avatar" style="background:var(--faint)">•</span>'}
+        <div><b>${esc(userName(e.by))}</b> ${esc(e.text)}${e.kind ? ` · <a href="#/team/k/${encodeURIComponent(e.kind)}">${esc(e.kind)}</a>` : ''}
+        <div class="when">${ago(e.at)}</div></div></div>`).join('') : '<div class="empty">Пока пусто</div>';
+  }
+
+  const kindByCode = code => S.kinds.find(k => k.code === code);
+  function uploadStats(id) {
+    const rs = S.runs.filter(r => r.uploadId === id);
+    const owners = {};
+    rs.filter(r => r.kindCode).forEach(r => { const k = kindByCode(r.kindCode); const o = (k && k.assignee) || ''; owners[o] = (owners[o] || 0) + 1; });
+    return {
+      docs: rs.length,
+      finished: rs.filter(r => r.finished && r.kindCode).length,
+      withErrors: rs.filter(r => r.finished && r.kindCode && effErrors(r).eff).length,
+      interrupted: rs.filter(r => !r.finished && r.kindCode).length,
+      unknown: rs.filter(r => r.guid && !r.kindCode).length,
+      unattributed: rs.filter(r => !r.guid && !r.kindCode).length,
+      owners,
+    };
+  }
+  const ownersLine = owners => Object.keys(owners).length ? `<div class="owners">${Object.entries(owners).sort((a, b) => b[1] - a[1])
+    .map(([o, n]) => o ? `<span>${who(o)} <b>${n}</b></span>` : `<span class="faint">без исполнителя ${n}</span>`).join('')}</div>` : '';
+
+  function pageUploads() {
+    const list = S.uploadsList;
+    return `
+      <div class="page-title"><h1>Протоколы</h1><span class="sub">${list.length} ${plural(list.length, 'загрузка', 'загрузки', 'загрузок')} · время в логе — МСК · нажмите на строку, чтобы посмотреть документы</span></div>
+      <div class="card card-pad" style="margin-bottom:16px">
+        <div class="drop" data-drop="">
+          ${I.upload}
+          <div class="big">Перетащите протоколы сюда — или в любое место окна</div>
+          <div class="muted">Можно несколько файлов сразу и чужие протоколы: документы отметятся у владельцев видов. Пакетные протоколы распознаются по GUID, одиночные — по составу алгоритмов.</div>
+          <input type="file" multiple accept=".txt,.log,text/plain" class="hidden">
+        </div>
+      </div>
+      ${!list.length ? '<div class="card"><div class="empty"><div class="ico">📄</div>Протоколов ещё нет</div></div>'
+        : `<div class="card table-wrap"><table class="t"><thead><tr>
+        <th class="nosort">№</th><th class="nosort">Файл</th><th class="nosort">Загрузил</th><th class="nosort">Период в логе</th>
+        <th class="nosort" style="min-width:200px">Документы · чьи</th><th class="nosort num">Выполнено</th><th class="nosort num">Ошибки</th><th class="nosort num">Прервано</th>
+        <th class="nosort num">Не из списка</th><th class="nosort"></th></tr></thead>
+        <tbody>${list.map(u => {
+          const c = uploadStats(u.id);
+          const t = c.docs || 1;
+          return `<tr data-upload="${u.id}">
+          <td class="muted">${u.id}</td>
+          <td><b>${esc(u.fileName)}</b><div class="sub-line" style="max-width:320px">${u.batch ? 'пакетный запуск' : 'одиночный запуск'}${u.summary ? ' · ' + esc(u.summary) : ''}</div></td>
+          <td>${who(u.by)}<div class="sub-line">${ago(u.at)}</div></td>
+          <td class="nowrap muted">${u.logFrom ? fmtDT(u.logFrom) + ' – ' + fmtDT(u.logTo).slice(-5) : '—'}</td>
+          <td><div class="progress thin">
+            <div style="width:${((c.finished - c.withErrors) / t) * 100}%;background:var(--ok)"></div>
+            <div style="width:${(c.withErrors / t) * 100}%;background:var(--err)"></div>
+            <div style="width:${(c.interrupted / t) * 100}%;background:var(--int)"></div>
+            <div style="width:${((c.unknown + c.unattributed) / t) * 100}%;background:var(--noi)"></div></div>
+            <div class="sub-line">${c.docs} ${plural(c.docs, 'документ', 'документа', 'документов')}${c.unattributed ? ` · <span style="color:var(--int)">вид не определён: ${c.unattributed}</span>` : ''}</div>
+            ${ownersLine(c.owners)}</td>
+          <td class="num" style="color:var(--ok);font-weight:700">${c.finished}</td>
+          <td class="num">${c.withErrors ? `<span class="errn">${c.withErrors}</span>` : '<span class="faint">0</span>'}</td>
+          <td class="num">${c.interrupted ? `<span style="color:var(--int);font-weight:700">${c.interrupted}</span>` : '<span class="faint">0</span>'}</td>
+          <td class="num muted">${c.unknown}</td>
+          <td class="nowrap" data-stop="1">
+            ${u.storagePath ? `<button class="btn small ghost" data-act="raw" data-id="${u.id}" title="Скачать исходный файл">${I.dl}</button>` : ''}
+            ${(S.me.isAdmin || u.by === S.me.login) ? `<button class="btn small ghost danger" data-act="delUpload" data-id="${u.id}" title="Удалить протокол и его отметки">${I.x}</button>` : ''}
+          </td></tr>`;
+        }).join('')}</tbody></table></div>`}`;
+  }
+
+  // =====================================================================================================================
+  // алгоритмы: время, ошибки, «пока не правим», версии и выкладка на сервер
+  function pageAlgs() {
+    return `
+      <div class="page-title"><h1>Алгоритмы</h1><span class="sub">время и ошибки — по последнему завершённому прогону каждого документа · нажмите на строку — увидите виды</span></div>
+      <div id="deployBox">${deployBox()}</div>
+      <div class="toolbar"><div class="search">${I.search}<input class="input" id="q-algs" data-act="aq" placeholder="Алгоритм" value="${esc(S.f.algs.q)}"><kbd class="hide-sm">/</kbd></div>
+        <div class="seg" id="algModes"></div>
+        <span class="muted" id="algSum"></span></div>
+      <div id="algs"><div class="card card-pad">${'<div class="skel" style="margin:12px 0"></div>'.repeat(6)}</div></div>`;
+  }
+
+  function deployBox() {
+    const pend = S.pendingVers;
+    const last = S.deploys[0];
+    const lastLine = last ? `Последняя выкладка: <b>${fmtDT(last.at, true)}</b> · ${esc(userName(last.by))} · ${last.algCount} ${plural(last.algCount, 'алгоритм', 'алгоритма', 'алгоритмов')}${last.note ? ' · ' + esc(last.note) : ''}` : 'Выкладок ещё не было.';
+    if (!pend.length) {
+      return `<div class="card deploy-card calm"><div class="txt"><span class="muted">${I.server}</span> Все исправленные алгоритмы уже на сервере. ${lastLine}
+        ${S.deploys.length ? ` · <a href="#" data-act="deployHistory">история (${S.deploys.length})</a>` : ''}</div></div>`;
+    }
+    const names = [...new Set(pend.map(v => v.name))];
+    return `<div class="card deploy-card">
+      <div class="txt"><b>${I.server} Обновлено ${names.length} ${plural(names.length, 'алгоритм', 'алгоритма', 'алгоритмов')} — ещё не залиты на сервер</b>
+        <div class="muted" style="margin-top:4px;font-size:13px">Залейте файлы на сервер ПКТС и нажмите кнопку — у всех откроется «JSON с ошибками» для перепрогона документов, где эти алгоритмы падали.</div>
+        <details><summary>Что обновлено</summary><div class="vlist">${pend.map(v => `<div><span class="mono">${esc(v.name)}</span> <span class="faint">v${v.version}${v.at ? ' · ' + fmtDT(v.at) : ''}</span>${v.note ? ` — ${esc(v.note)}` : ''}</div>`).join('')}</div></details>
+        <div class="why">${lastLine}${S.deploys.length ? ` · <a href="#" data-act="deployHistory">история</a>` : ''}</div></div>
+      <div class="act">${isDev()
+        ? `<input class="input" id="deployNote" placeholder="Комментарий (необязательно)" style="width:220px"><button class="btn primary" data-act="deploy">${I.check}Залил на сервер</button>`
+        : '<span class="muted" style="font-size:13px">Подтверждает выкладку разработчик.</span>'}</div>
+    </div>`;
+  }
+
+  async function loadAlgs() {
+    if (!S.algs) {
+      const ids = [...new Set(S.kinds.flatMap(k => [k.s1.fin && k.s1.fin.id, ...k.docs2.map(d => d.st.fin && d.st.fin.id)]).filter(Boolean))];
+      const rows = [];
+      for (let i = 0; i < ids.length; i += 1000) {
+        const part = await safe(() => DB.runsAlgs(ids.slice(i, i + 1000)));
+        if (!part) return;
+        rows.push(...part);
+      }
+      const acc = new Map();
+      const get = name => { let x = acc.get(name); if (!x) acc.set(name, x = { name, docs: 0, count: 0, totalSec: 0, maxSec: 0, failed: 0, kinds: new Set() }); return x; };
+      for (const r of rows) for (const a of (r.algs || [])) {
+        const x = get(a.name);
+        x.docs++; x.count += a.count; x.totalSec += a.totalSec; x.maxSec = Math.max(x.maxSec, a.maxSec); if (a.failed) x.failed++;
+        x.kinds.add(r.kindCode);
+      }
+      S.versions.forEach((vs, name) => get(name));   // исправленные, даже если ещё не запускались
+      S.algs = [...acc.values()].map(x => ({ ...x, kinds: [...x.kinds], avgSec: x.count ? x.totalSec / x.count : 0 }));
+    }
+    renderAlgs();
+  }
+
+  function algMode(a) {
+    const v = verInfo(a.name);
+    return { ign: ignored(a.name), failed: a.failed > 0, pending: !!(v && v.pending), deployed: !!(v && !v.pending && v.last.version > 1), v };
+  }
+
+  function renderAlgs() {
+    const el = $('#algs');
+    if (!el || !S.algs) return;
+    const q = S.f.algs.q.trim().toLowerCase();
+    const mode = S.f.algs.mode;
+    const s = S.sort.algs;
+    const withMode = S.algs.map(a => ({ a, m: algMode(a) }));
+    const counts = { all: withMode.length, failed: 0, ignored: 0, pending: 0, deployed: 0 };
+    withMode.forEach(({ m }) => { if (m.failed && !m.ign) counts.failed++; if (m.ign) counts.ignored++; if (m.pending) counts.pending++; if (m.deployed) counts.deployed++; });
+    const mb = (key, label, col) => `<button class="${mode === key ? 'on' : ''}" data-act="amode" data-key="${key}">${col ? `<span class="dot" style="background:${col}"></span>` : ''}${label}<span class="n">${counts[key]}</span></button>`;
+    $('#algModes').innerHTML = mb('all', 'Все') + mb('failed', 'С ошибками', 'var(--err)') + mb('ignored', 'Пока не правим', 'var(--faint)') + mb('pending', 'Ждут выкладки', 'var(--int)') + mb('deployed', 'Исправлены', 'var(--rev)');
+    const list = withMode.filter(({ a, m }) => (!q || a.name.toLowerCase().includes(q))
+      && (mode === 'all' || (mode === 'failed' && m.failed && !m.ign) || (mode === 'ignored' && m.ign) || (mode === 'pending' && m.pending) || (mode === 'deployed' && m.deployed)))
+      .sort((x, y) => (x.a[s.key] < y.a[s.key] ? -1 : x.a[s.key] > y.a[s.key] ? 1 : 0) * s.dir);
+    const max = Math.max(1, ...S.algs.map(a => a.maxSec));
+    const tot = S.algs.reduce((x, a) => x + a.totalSec, 0);
+    $('#algSum').textContent = S.algs.length ? `${S.algs.length} алгоритмов · суммарно ${fmtSec(tot)}` : '';
+    if (!S.algs.length) { el.innerHTML = '<div class="card"><div class="empty"><div class="ico">⏱️</div>Данных пока нет — загрузите протоколы</div></div>'; return; }
+    if (!list.length) { el.innerHTML = '<div class="card"><div class="empty"><div class="ico">🔎</div>Ничего не найдено</div></div>'; return; }
+    const th = (key, label, cls = '') => `<th class="${cls}" data-act="asort" data-key="${key}">${label}${s.key === key ? `<span class="arr">${s.dir > 0 ? '↑' : '↓'}</span>` : ''}</th>`;
+    const dev = isDev();
+    const verCell = m => !m.v ? '<span class="faint">—</span>'
+      : m.v.pending ? `<span class="pill fixp small" title="${esc(m.v.notes)}">v${m.v.last.version} · ждёт выкладки</span>`
+        : m.v.last.version > 1 ? `<span class="pill fixd small" title="${esc(m.v.notes)}">v${m.v.last.version} · ${m.v.deploy ? fmtDT(m.v.deploy.at) : 'выложено'}</span>` : '<span class="faint">v1</span>';
+    el.innerHTML = `<div class="card table-wrap"><table class="t"><thead><tr>
+      ${th('name', 'Алгоритм')}${th('docs', 'Док.', 'num')}${th('avgSec', 'Среднее', 'num')}
+      ${th('maxSec', 'Максимум', 'num')}<th class="nosort" style="width:140px"></th>${th('totalSec', 'Всего', 'num')}${th('failed', 'С ошибкой', 'num')}
+      <th class="nosort">Версия</th><th class="nosort">Ошибки</th></tr></thead>
+      <tbody>${list.slice(0, 800).map(({ a, m }) => `<tr data-alg="${esc(a.name)}">
+        <td class="mono">${esc(a.name)}${S.links && S.links.has(a.name.toLowerCase()) ? ' <span class="faint">(связи)</span>' : ''}</td><td class="num">${a.docs}</td>
+        <td class="num">${fmtSec(a.avgSec)}</td><td class="num"><b>${fmtSec(a.maxSec)}</b></td>
+        <td><div class="alg-bar ${a.failed && !m.ign ? 'f' : ''}" style="width:${Math.max(1, (a.maxSec / max) * 100)}%"></div></td>
+        <td class="num">${fmtSec(a.totalSec)}</td>
+        <td class="num">${a.failed ? (m.ign ? `<span class="muted" title="пока не правим">${a.failed}</span>` : `<span class="errn">${a.failed}</span>`) : '<span class="faint">0</span>'}</td>
+        <td class="nowrap">${verCell(m)}</td>
+        <td data-stop="1" class="nowrap">${m.ign || (dev && a.failed)
+          ? `<button class="tgl ${m.ign ? 'on' : ''}" data-act="ignore" data-name="${esc(a.name)}" ${dev ? '' : 'disabled'} title="${m.ign ? esc((S.flags.get(a.name).note || 'Ошибки не считаются, проверка вручную') + ' · ' + userName(S.flags.get(a.name).by)) : 'Ошибки этого алгоритма не будут считаться (проверка вручную)'}">${I.mute}${m.ign ? 'не правим' : 'пока не правим'}</button>`
+          : ''}</td></tr>`).join('')}</tbody></table></div>`;
+  }
+
+  // =====================================================================================================================
+  // карточка вида
+  function closeDrawer(silent) {
+    const ov = $('#overlay');
+    if (ov) ov.innerHTML = '';
+    if (!silent && S.kindOpen) { S.kindOpen = null; go(S.route); }
+  }
+
+  async function openKind(code) {
+    const ov = $('#overlay');
+    if (!ov) return;
+    const k = kindByCode(code);
+    if (!k) { toast('Вид ' + code + ' не найден', true); return; }
+    if (!ov.querySelector('.drawer')) {
+      ov.innerHTML = `<div class="backdrop" data-act="closeDrawer"></div><aside class="drawer"><div class="drawer-body">${'<div class="skel" style="margin:14px 0"></div>'.repeat(8)}</div></aside>`;
+    }
+    const runs = await safe(() => DB.runsFull({ kindCode: code }));
+    if (!runs || S.kindOpen !== code) return;
+    S.cur = { k, runs };
+    renderDrawer();
+  }
+
+  // ошибка с пометками: «не правим», исправлено и выложено / ждёт выкладки
+  function errBox(e, runAt) {
+    const ign = ignored(e.alg);
+    const fx = e.alg && !ign ? algFix(e.alg, runAt) : null;
+    const tags = (ign ? '<span class="pill ign small">не правим</span>' : '')
+      + (fx === 'deployed' ? '<span class="pill fixd small">исправлено — перепрогнать</span>' : fx === 'pending' ? '<span class="pill fixp small">исправлено, ждёт выкладки</span>' : '');
+    return `<div class="errbox ${ign ? 'ign' : ''}"><div class="a">${esc(e.alg || 'Документ')}${tags ? `<span class="tags">${tags}</span>` : ''}</div><div style="margin-top:3px">${esc(e.message)}</div>
+      ${e.details ? `<details><summary>Подробности и стек</summary><pre>${esc(e.details)}</pre></details>` : ''}</div>`;
+  }
+
+  function renderDrawer() {
+    const ov = $('#overlay');
+    if (!ov || !S.cur) return;
+    const { runs } = S.cur;
+    const k = kindByCode(S.cur.k.code) || S.cur.k;
+    const stage = curStage() === 2 && k.docs2.length ? 2 : 1;
+    const v = viewOf(k, stage);
+    const up = new Map(S.uploadsList.map(u => [u.id, u]));
+    const full = new Map(runs.map(r => [r.id, r]));
+    runs.sort((a, b) => ts(b.startAt) - ts(a.startAt) || b.uploadId - a.uploadId || b.id - a.id);
+    // документы вида: этап 1 + этап 2
+    const docs = [];
+    if (k.guid || k.s1.last) docs.push({ stage: 1, guid: k.guid, ps: '', st: k.s1 });
+    k.docs2.forEach(d => docs.push({ stage: 2, guid: d.guid, ps: d.ps, st: d.st }));
+    const finOf = d => d.st.fin ? full.get(d.st.fin.id) || d.st.fin : null;
+    const lastFin = finOf(docs[0] || { st: k.s1 });
+    const last = k.s1.last ? full.get(k.s1.last.id) || k.s1.last : null;
+    const errs1 = ((lastFin || last || {}).errors) || [];
+    const errDocs = docs.filter(d => d.st.fin && (finOf(d).errors || []).length);
+    const errTotal = docs.reduce((a, d) => a + d.st.errors, 0);
+    const algRun = lastFin || (errDocs[0] && finOf(errDocs[0])) || null;
+    const algMap = new Map(((algRun && algRun.algs) || []).map(a => [a.name.toLowerCase(), a]));
+    const own = k.algorithms.concat((k.linkAlgs || []).filter(a => !k.algorithms.some(b => b.toLowerCase() === a.toLowerCase())));
+    const inKind = new Set(own.map(a => a.toLowerCase()));
+    const algs = own.map(a => { const x = algMap.get(a.toLowerCase()); return x ? { ...x, name: a, inKind: true, ran: true } : { name: a, inKind: true, ran: false, count: 0, totalSec: 0, maxSec: 0, failed: false }; })
+      .concat([...algMap.values()].filter(x => !inKind.has(x.name.toLowerCase())).map(x => ({ ...x, inKind: false, ran: true })))
+      .sort((a, b) => b.totalSec - a.totalSec || (a.name < b.name ? -1 : 1));
+    const maxAlg = Math.max(0.001, ...algs.map(a => a.totalSec));
+    const notRan = algs.filter(a => a.inKind && !a.ran && !LogParser.isLink(S.links, a.name)).length;
+    const pos = S.nav.indexOf(k.code);
+    const tab = S.tab;
+    const tb = (id, label, n, err) => `<button class="${tab === id ? 'on' : ''}" data-act="tab" data-tab="${id}">${label}${n != null ? `<span class="n ${err && n ? 'err' : ''}">${n}</span>` : ''}</button>`;
+    const docLabel = d => `${d.stage === 2 ? '<span class="stage-chip">этап 2</span>' : '<span class="pill plain small">этап 1</span>'} <span class="mono copy" data-act="copy" data-text="${esc(d.guid || '')}" title="Скопировать GUID">${esc(d.guid || 'без GUID')}</span>${d.ps ? ` <span class="pill plain small">${esc(psLabel(d.ps))}</span>` : ''}`;
+    const rv = stage === 2 ? { st: k.review2Status, c: k.review2Comment, by: k.review2By, at: k.review2At } : { st: k.reviewStatus, c: k.reviewComment, by: k.reviewBy, at: k.reviewAt };
+    let body = '';
+    if (tab === 'overview') {
+      const a = k.s2;
+      body = `
+        <div class="review-box">
+          ${k.docs2.length ? `<div class="faint" style="font-size:12px;margin-bottom:8px">Отметка проверки — для этапа ${stage}${stage === 2 ? ` (${a.done} из ${a.total} документов выполнено)` : ''}</div>` : ''}
+          <div class="btns">
+            <button class="btn ${rv.st === 'ok' ? 'ok-on' : ''}" data-act="review" data-st="ok" data-stage="${stage}">${I.check}Проверено, замечаний нет</button>
+            <button class="btn ${rv.st === 'issue' ? 'issue-on' : ''}" data-act="review" data-st="issue" data-stage="${stage}">${I.flag}Есть замечание</button>
+            ${rv.st ? `<button class="btn ghost small" data-act="review" data-st="" data-stage="${stage}">Снять отметку</button>` : ''}
+            <label class="check" style="margin-left:auto;font-size:12.5px;color:var(--muted)"><input type="checkbox" data-act="autoNext" ${pref('autoNext', '1') === '1' ? 'checked' : ''}> затем к следующему</label>
+          </div>
+          <textarea class="input" id="revComment" placeholder="Комментарий: что не так с результатом, что сверяли…">${esc(rv.c || '')}</textarea>
+          ${rv.by ? `<div class="faint" style="font-size:12px;margin-top:6px">Отметил(а): ${esc(userName(rv.by))}, ${fmtDT(rv.at, true)}</div>` : ''}
+        </div>
+        ${stage === 2 ? `<div class="section"><h4>Этап 2 · ${a.total} ${plural(a.total, 'документ', 'документа', 'документов')}</h4>
+          <div class="meta-grid">
+            <div class="mg"><div class="l">Выполнено</div><div class="v" style="color:var(--ok)">${a.done} из ${a.total}</div></div>
+            <div class="mg"><div class="l">С ошибками</div><div class="v" style="color:${a.errors ? 'var(--err)' : 'inherit'}">${a.errors}</div></div>
+            <div class="mg"><div class="l">Прервано / не выполнялось</div><div class="v">${a.interrupted} / ${a.pending}</div></div>
+            <div class="mg"><div class="l">Средний документ</div><div class="v">${fmtSec(v.docSec)}</div></div>
+          </div>
+          <div style="margin-top:10px">${progressBar(a)}</div>
+          <button class="btn small" style="margin-top:12px" data-act="tab" data-tab="docs">Все документы этапа</button></div>` : ''}
+        <div class="section"><h4>Последний прогон${k.docs2.length ? ' (этап 1)' : ''}</h4>
+          ${last ? `<div class="meta-grid">
+            <div class="mg"><div class="l">Когда</div><div class="v">${fmtDT(last.startAt, true)}</div></div>
+            <div class="mg"><div class="l">Время документа</div><div class="v">${fmtSec(docSec(lastFin || last))}</div></div>
+            <div class="mg"><div class="l">Ошибок</div><div class="v" style="color:${k.errors ? 'var(--err)' : 'inherit'}">${k.errors}${k.ignored ? ` <span class="faint" style="font-weight:500">+ ${k.ignored} «не правим»</span>` : ''}</div></div>
+            <div class="mg"><div class="l">Алгоритмов отработало</div><div class="v">${algs.filter(x => x.ran).length} из ${own.length}${notRan && lastFin ? ` <span class="faint" style="font-weight:500">(не запускались ${notRan})</span>` : ''}</div></div>
+          </div>
+          ${!lastFin && last.running && last.running.length ? `<div class="errbox warn" style="margin-top:12px"><div class="a" style="color:var(--int);font-family:var(--font)">Протокол оборвался во время выполнения:</div><div class="mono" style="margin-top:4px">${last.running.map(esc).join('<br>')}</div></div>` : ''}
+          ${errs1.length ? `<div class="section"><h4>Ошибки</h4>${errs1.slice(0, 3).map(e => errBox(e, (lastFin || last).startAt)).join('')}${errs1.length > 3 || errDocs.length > 1 ? `<button class="btn small" data-act="tab" data-tab="errors">Все ошибки (${errTotal})</button>` : ''}</div>` : ''}`
+        : `<div class="empty" style="padding:24px"><div class="ico">⏳</div>Протоколов по этому виду ещё не загружали</div>`}
+        </div>
+        <div class="section"><h4>Протокол одиночного запуска</h4>
+          <div class="drop" data-drop="${esc(k.code)}" style="padding:14px">
+            <b>Перетащите сюда протокол запуска этого документа</b>
+            <div class="muted" style="font-size:12.5px">он будет отнесён к ${esc(k.code)} — даже если в нём нет GUID</div>
+            <input type="file" multiple accept=".txt,.log,text/plain" class="hidden"></div>
+        </div>
+        ${S.me.isAdmin ? `<div class="section"><h4>Исполнитель</h4>
+          <div style="display:flex;gap:8px;flex-wrap:wrap"><select class="input" id="reassign">${S.users.map(u => `<option value="${esc(u.login)}" ${k.assignee === u.login ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}
+          <option value="" ${!k.assignee ? 'selected' : ''}>— без исполнителя —</option></select>
+          <button class="btn" data-act="reassign">Назначить</button></div></div>` : ''}
+        <div class="kbd-hint"><span><kbd>←</kbd> <kbd>→</kbd> соседние виды</span><span><kbd>Esc</kbd> закрыть</span></div>`;
+    } else if (tab === 'docs') {
+      body = docs.length ? `<div class="table-wrap"><table class="t"><thead><tr><th class="nosort">Документ</th><th class="nosort">Статус</th><th class="nosort">Прогон</th><th class="nosort num">Время</th><th class="nosort num">Ошибок</th></tr></thead>
+        <tbody>${docs.map(d => `<tr style="cursor:default">
+          <td style="font-size:12px">${docLabel(d)}</td>
+          <td>${pill(d.st.last ? d.st.status : (d.guid ? 'pending' : 'noinstance'))}${d.st.fix === 'deployed' ? '<div class="sub-line" style="color:var(--rev)">исправлено — перепрогнать</div>' : d.st.fix === 'pending' ? '<div class="sub-line" style="color:var(--int)">ждёт выкладки</div>' : ''}</td>
+          <td class="nowrap muted">${d.st.lastRunAt ? fmtDT(d.st.lastRunAt) : '—'}</td>
+          <td class="num">${fmtSec(d.st.sec)}</td>
+          <td class="num">${d.st.errors ? `<span class="errn">${d.st.errors}</span>` : d.st.fin ? '0' : '—'}${d.st.ignored ? ` <span class="faint" title="пока не правим">+${d.st.ignored}</span>` : ''}</td></tr>`).join('')}</tbody></table></div>`
+        : '<div class="empty"><div class="ico">📄</div>Нет документов</div>';
+    } else if (tab === 'errors') {
+      body = errDocs.length ? errDocs.map(d => { const r = finOf(d); return `<div class="doc-h">${docLabel(d)} <span class="faint">${fmtDT(r.startAt, true)}</span></div>${(r.errors || []).map(e => errBox(e, r.startAt)).join('')}`; }).join('')
+        : '<div class="empty"><div class="ico">✅</div>Ошибок в последних прогонах нет</div>';
+    } else if (tab === 'algs') {
+      body = `${algRun && algRun !== lastFin ? '<div class="faint" style="margin-bottom:8px;font-size:12.5px">по документу этапа 2</div>' : ''}<div class="table-wrap"><table class="t"><thead><tr><th class="nosort">Алгоритм</th><th class="nosort num">Запусков</th><th class="nosort num">Время</th><th class="nosort" style="width:130px"></th><th class="nosort num">Макс.</th></tr></thead>
+        <tbody>${algs.map(a => { const vi = verInfo(a.name); return `<tr style="cursor:default">
+          <td class="mono">${a.failed ? (ignored(a.name) ? '<span class="faint" title="ошибка, пока не правим">✗</span>' : '<span style="color:var(--err)" title="ошибка">✗</span>') : a.ran ? '<span style="color:var(--ok)">✓</span>' : '<span class="faint" title="не запускался">·</span>'} ${esc(a.name)}${LogParser.isLink(S.links, a.name) ? ' <span class="faint">(связи)</span>' : a.inKind ? '' : ' <span class="faint">(общий)</span>'}
+            ${ignored(a.name) ? ' <span class="pill ign small">не правим</span>' : ''}${vi && vi.last.version > 1 || vi && vi.pending ? ` <span class="pill ${vi.pending ? 'fixp' : 'fixd'} small" title="${esc(vi.notes)}">v${vi.last.version}</span>` : ''}</td>
+          <td class="num">${a.ran ? a.count : '—'}</td><td class="num">${a.ran ? fmtSec(a.totalSec) : '—'}</td>
+          <td>${a.ran ? `<div class="alg-bar ${a.failed && !ignored(a.name) ? 'f' : ''}" style="width:${Math.max(2, (a.totalSec / maxAlg) * 100)}%"></div>` : ''}</td>
+          <td class="num">${a.ran ? fmtSec(a.maxSec) : '—'}</td></tr>`; }).join('')}</tbody></table></div>`;
+    } else {
+      body = runs.length ? `<div class="timeline">${runs.map(r => {
+        const u = up.get(r.uploadId) || {};
+        const ee = effErrors({ ...r, errAlgs: r.errAlgs || (r.errors || []).map(e => e.alg || '') });
+        const stc = r.finished ? (ee.eff ? 'errors' : 'ok') : 'interrupted';
+        const st2 = r.guid && (r.guid !== k.guid || r.ps);
+        return `<div class="tl ${stc}"><div class="h"><div><b>${fmtDT(r.startAt, true)}</b> · ${r.finished ? (ee.eff ? `с ошибками (${ee.eff})` : 'выполнен') : 'прерван'}${r.total ? ` <span class="faint">· документ ${r.idx} из ${r.total}</span>` : ''}${st2 ? ` <span class="stage-chip">этап 2</span> <span class="faint mono" style="font-size:11.5px">${esc(shortGuid(r.guid))}${r.ps ? ' · ' + esc(psLabel(r.ps)) : ''}</span>` : ''}</div><div class="nowrap"><b>${fmtSec(docSec(r))}</b></div></div>
+          <div class="faint" style="font-size:12.5px">${esc(u.fileName || '')} · загрузил(а) ${esc(userName(u.by))} ${ago(u.at)}${r.match === 'auto' ? ' · вид определён по алгоритмам' : r.match === 'manual' || r.match === 'hint' ? ' · вид указан вручную' : ''}</div></div>`;
+      }).join('')}</div>` : '<div class="empty"><div class="ico">⏳</div>Прогонов ещё не было</div>';
+    }
+    ov.innerHTML = `<div class="backdrop" data-act="closeDrawer"></div>
+    <aside class="drawer" role="dialog" aria-label="Вид ${esc(k.code)}">
+      <div class="drawer-head">
+        <div class="row1"><span class="code">${esc(k.code)}</span>${pill(v.status || k.status)}${stage === 2 ? ` <span class="stage-chip">этап 2 · ${k.s2.done}/${k.s2.total}</span>` : ''}
+          ${rv.st === 'ok' ? `<span class="pill rev">${I.check}Проверено</span>` : rv.st === 'issue' ? `<span class="pill issue">${I.flag}Замечание</span>` : ''}
+          <div class="drawer-nav">
+            ${pos >= 0 ? `<button class="btn ghost icon" data-act="prev" title="Предыдущий (←)" ${pos <= 0 ? 'disabled' : ''}>${I.left}</button>
+              <span class="pos">${pos + 1} / ${S.nav.length}</span>
+              <button class="btn ghost icon" data-act="next" title="Следующий (→)" ${pos >= S.nav.length - 1 ? 'disabled' : ''}>${I.right}</button>` : ''}
+            <button class="btn ghost icon close-x" data-act="closeDrawer" title="Закрыть (Esc)">${I.x}</button>
+          </div></div>
+        <h2>${esc(k.name) || '<span class="faint">без наименования</span>'}</h2>
+        <div style="display:flex;gap:8px 18px;flex-wrap:wrap;color:var(--muted);font-size:13px">
+          <span>${typeRu(k.doctype, k.category)}</span><span>${who(k.assignee)}</span><span>${k.algCount} ${plural(k.algCount, 'алгоритм', 'алгоритма', 'алгоритмов')}${k.linkAlgs && k.linkAlgs.length ? ` + связи` : ''}</span>
+          ${k.guid ? `<span class="copy mono" data-act="copy" data-text="${esc(k.guid)}" title="Скопировать GUID">${esc(k.guid)}</span>` : '<span class="faint">нет экземпляра документа</span>'}
+        </div>
+        <div class="tabs">${tb('overview', 'Обзор')}${k.docs2.length ? tb('docs', 'Документы', docs.length) : ''}${tb('errors', 'Ошибки', errTotal, true)}${tb('algs', 'Алгоритмы', algs.length)}${tb('history', 'История', runs.length)}</div>
+      </div>
+      <div class="drawer-body">${body}</div>
+    </aside>`;
+    bindDrops();
+  }
+
+  function navKind(delta) {
+    const pos = S.nav.indexOf(S.kindOpen);
+    const nxt = S.nav[pos + delta];
+    if (nxt) go(S.route, nxt);
+  }
+
+  // =====================================================================================================================
+  // загрузка протоколов (разбор в браузере)
+  function pickFiles(hint) {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.multiple = true; inp.accept = '.txt,.log,text/plain';
+    inp.onchange = () => { if (inp.files.length) processFiles([...inp.files], hint || ''); };
+    inp.click();
+  }
+
+  function bindDrops() {
+    $$('.drop').forEach(z => {
+      if (z.dataset.bound) return;
+      z.dataset.bound = '1';
+      const inp = $('input[type=file]', z);
+      z.onclick = () => inp.click();
+      inp.onclick = e => e.stopPropagation();
+      inp.onchange = () => { if (inp.files.length) processFiles([...inp.files], z.dataset.drop); inp.value = ''; };
+      z.ondragover = e => { e.preventDefault(); z.classList.add('over'); };
+      z.ondragleave = () => z.classList.remove('over');
+      z.ondrop = e => { e.preventDefault(); e.stopPropagation(); z.classList.remove('over'); hideDropOverlay(); if (e.dataTransfer.files.length) processFiles([...e.dataTransfer.files], z.dataset.drop); };
+    });
+  }
+
+  // перетаскивание файла в любое место окна
+  let dragDepth = 0;
+  const isFileDrag = e => e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files');
+  function showDropOverlay() {
+    if ($('.drop-overlay') || !S.me) return;
+    const d = document.createElement('div');
+    d.className = 'drop-overlay';
+    d.innerHTML = `<div class="box">${I.upload}<b>Отпустите — протоколы будут разобраны</b><div class="muted">выполненные документы отметятся автоматически</div></div>`;
+    document.body.appendChild(d);
+  }
+  function hideDropOverlay() { dragDepth = 0; $$('.drop-overlay').forEach(x => x.remove()); }
+  window.addEventListener('dragenter', e => { if (!isFileDrag(e) || !S.me) return; dragDepth++; showDropOverlay(); });
+  window.addEventListener('dragleave', e => { if (!isFileDrag(e)) return; if (--dragDepth <= 0) hideDropOverlay(); });
+  window.addEventListener('dragover', e => { if (isFileDrag(e) && S.me) e.preventDefault(); });
+  window.addEventListener('drop', e => {
+    if (!isFileDrag(e) || !S.me) return;
+    e.preventDefault();
+    hideDropOverlay();
+    if (e.dataTransfer.files.length) processFiles([...e.dataTransfer.files], '');
+  });
+
+  function busy(text, frac) {
+    let b = $('.busy');
+    if (text == null) { if (b) b.remove(); return; }
+    if (!b) { b = document.createElement('div'); b.className = 'busy'; document.body.appendChild(b); }
+    b.innerHTML = `<div><span class="spin"></span> ${esc(text)}</div><div class="progress"><div style="width:${Math.round((frac || 0) * 100)}%;background:linear-gradient(90deg,var(--accent),var(--accent-2))"></div></div>`;
+  }
+
+  // какой скачанный JSON был запущен: тот, у которого на позициях N/M протокола стоят те же GUID — из него берётся набор параметров
+  async function matchBatches(docs) {
+    const res = new Map();
+    const totals = [...new Set(docs.filter(d => d.guid && d.total).map(d => d.total))];
+    for (const t of totals) {
+      const dt = docs.filter(d => d.guid && d.total === t);
+      let cands = [];
+      try { cands = await DB.findBatches(t); } catch { }
+      const b = cands.find(c => dt.every(d => { const it = c.items[d.idx - 1]; return it && String(it[1]).toLowerCase() === d.guid; }));
+      if (b) res.set(t, b);
+    }
+    return res;
+  }
+
+  async function processFiles(files, hint) {
+    if (S.uploading) { toast('Дождитесь окончания текущей загрузки'); return; }
+    files = files.filter(f => f.size > 0);
+    if (!files.length) return;
+    S.uploading = true;
+    const guidMap = new Map(S.kinds.filter(k => k.guid).map(k => [k.guid.toLowerCase(), k.code]));
+    S.instances.forEach(x => { if (!guidMap.has(x.guid.toLowerCase())) guidMap.set(x.guid.toLowerCase(), x.kindCode); });
+    const reports = [];
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        busy(`Разбор «${f.name}» (${i + 1} из ${files.length})…`, i / files.length);
+        await new Promise(r => setTimeout(r, 20));
+        const text = LogParser.decode(await f.arrayBuffer());
+        const p = LogParser.parse(text, { shiftHours: LOG_SHIFT, links: S.links });
+        const plans = await matchBatches(p.docs);
+        let unknown = 0, unattributed = 0;
+        const runs = p.docs.map((d, pos) => {
+          const r = { ...d, pos, kindCode: null, match: null, candidates: [], ps: '', batchId: null };
+          if (d.guid) {
+            const plan = plans.get(d.total);
+            if (plan) { const it = plan.items[d.idx - 1]; r.ps = (it && it[2]) || ''; r.batchId = plan.id; }
+            const c = guidMap.get(d.guid);
+            if (c) { r.kindCode = c; r.match = 'guid'; } else unknown++;
+          } else if (hint) { r.kindCode = hint; r.match = 'hint'; }
+          else {
+            const m = LogParser.matchKind(S.kinds, d, S.links);
+            r.candidates = m.candidates;
+            if (m.code) { r.kindCode = m.code; r.match = 'auto'; } else unattributed++;
+          }
+          return r;
+        });
+        const effOf = r => effErrors({ errorCount: r.errors.length, errAlgs: r.errors.map(e => e.alg || '') }).eff;
+        const fin = runs.filter(r => r.finished && r.kindCode).length;
+        const err = runs.filter(r => r.finished && r.kindCode && effOf(r)).length;
+        const intr = runs.filter(r => !r.finished && r.kindCode).length;
+        const owners = {};
+        runs.filter(r => r.kindCode).forEach(r => { const k = kindByCode(r.kindCode); const o = (k && k.assignee) || ''; owners[o] = (owners[o] || 0) + 1; });
+        busy(`Сохранение «${f.name}»…`, (i + 0.6) / files.length);
+        const id = await DB.saveUpload({
+          fileName: f.name, by: S.me.login, size: f.size, operations: p.operations, batch: p.batch, summary: p.summary, logFrom: p.from, logTo: p.to,
+        }, runs, text);
+        const others = Object.keys(owners).filter(o => o && o !== S.me.login);
+        await DB.addEvent({
+          by: S.me.login, uploadId: id,
+          text: `загрузил(а) протокол «${f.name}»: выполнено ${fin}, с ошибками ${err}, прервано ${intr}` + (unknown ? `, не из списка ${unknown}` : '') + (unattributed ? `, вид не определён ${unattributed}` : '')
+            + (others.length ? ` (документы: ${Object.entries(owners).map(([o, n]) => `${o ? userName(o) : 'без исполнителя'} ${n}`).join(', ')})` : ''),
+        });
+        reports.push({
+          id, fileName: f.name, batch: p.batch, summary: p.summary, docs: runs.length, finished: fin, withErrors: err, interrupted: intr, unknown, unattributed, owners,
+          planned: runs.filter(r => r.batchId).length,
+          running: [...new Set(runs.filter(r => !r.finished).flatMap(r => r.running))],
+          kinds: [...new Set(runs.filter(r => r.kindCode).map(r => r.kindCode))],
+        });
+      }
+    } catch (e) {
+      console.error(e);
+      toast('Ошибка загрузки: ' + e.message, true);
+    } finally {
+      S.uploading = false;
+      busy(null);
+    }
+    S.algs = null;
+    await safe(loadState);
+    renderShell();
+    renderPage();
+    if (S.kindOpen) openKind(S.kindOpen);
+    if (reports.length) showReport(reports);
+  }
+
+  function showReport(rep) {
+    const st = pageStage('my');
+    const mine = stats(myList(), st);
+    const fin = rep.reduce((a, r) => a + r.finished, 0);
+    modal('Протоколы разобраны', `
+      <div class="big-ok">${donut(mine, 74, 9)}<div><b>${fin}</b> ${plural(fin, 'документ отмечен', 'документа отмечено', 'документов отмечено')} выполненными
+        <div class="muted">У вас осталось ${mine.remaining} ${plural(mine.remaining, 'документ', 'документа', 'документов')}${st === 2 ? ' этапа 2' : ''}${mine.toReview ? `, ждут проверки — ${mine.toReview} ${plural(mine.toReview, 'вид', 'вида', 'видов')}` : ''}</div></div></div>
+      ${rep.map(r => `<div class="report">
+        <div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap"><b>${esc(r.fileName)}</b>
+          <span class="muted">${r.batch ? 'пакетный запуск' : 'одиночный запуск'} · ${r.docs} ${plural(r.docs, 'документ', 'документа', 'документов')}</span></div>
+        ${r.summary ? `<div class="faint" style="font-size:12.5px">Сводка сервера: ${esc(r.summary)}</div>` : ''}
+        <div class="nums">
+          <span class="pill ok"><i></i>выполнено ${r.finished}</span>
+          ${r.withErrors ? `<span class="pill errors"><i></i>из них с ошибками ${r.withErrors}</span>` : ''}
+          ${r.interrupted ? `<span class="pill interrupted"><i></i>прервано ${r.interrupted}</span>` : ''}
+          ${r.unknown ? `<span class="pill pending"><i></i>не из списка видов ${r.unknown}</span>` : ''}
+          ${r.unattributed ? `<span class="pill interrupted"><i></i>вид не определён ${r.unattributed}</span> <a href="#" data-act="openUpload" data-id="${r.id}">указать вручную →</a>` : ''}
+        </div>
+        ${Object.keys(r.owners).some(o => o !== S.me.login) ? `<div class="faint" style="font-size:12.5px;margin-top:8px">Отмечено у владельцев видов:</div>${ownersLine(r.owners)}` : ''}
+        ${r.running.length ? `<div class="errbox warn" style="margin:10px 0 0"><div style="font-size:12.5px">Протокол оборвался во время: <span class="mono">${r.running.map(esc).join(', ')}</span></div></div>` : ''}
+        ${!r.docs ? '<div class="muted" style="margin-top:8px">В файле не найдено ни одного документа — это точно протокол выполнения алгоритмов?</div>' : ''}
+      </div>`).join('')}`,
+      `<button class="btn" data-act="closeModal">Закрыть</button>
+       ${mine.toReview ? `<button class="btn" data-act="startReview">${I.check}Проверять результаты (${mine.toReview})</button>` : ''}
+       <button class="btn primary" data-act="dlRemaining" data-login="${esc(S.me.login)}" data-st="${st}" ${mine.remaining ? '' : 'disabled'}>${I.dl}JSON остатка (${mine.remaining})</button>`);
+  }
+
+  async function openUpload(id) {
+    const u = S.uploadsList.find(x => x.id === id);
+    if (!u) return;
+    const runs = await safe(() => DB.runsFull({ uploadId: id }));
+    if (!runs) return;
+    runs.sort((a, b) => a.pos - b.pos);
+    const kname = c => (kindByCode(c) || {}).name || '';
+    const owner = c => { const k = kindByCode(c); return k && k.assignee ? `<div class="sub-line">${esc(userName(k.assignee))}</div>` : ''; };
+    modal(`Протокол №${u.id} · ${esc(u.fileName)}`, `
+      <div class="meta-grid" style="margin-bottom:14px">
+        <div class="mg"><div class="l">Загрузил(а)</div><div class="v">${esc(userName(u.by))}</div></div>
+        <div class="mg"><div class="l">Когда</div><div class="v">${fmtDT(u.at, true)}</div></div>
+        <div class="mg"><div class="l">Операция</div><div class="v" style="font-weight:600">${esc((u.operations || []).join(', ') || '—')}</div></div>
+        ${u.summary ? `<div class="mg"><div class="l">Сводка сервера</div><div class="v" style="font-weight:600">${esc(u.summary)}</div></div>` : ''}
+      </div>
+      <datalist id="kindCodes">${S.kinds.map(k => `<option value="${esc(k.code)}">${esc(k.name)}</option>`).join('')}</datalist>
+      <div class="table-wrap"><table class="t"><thead><tr><th class="nosort">№</th><th class="nosort">Документ</th><th class="nosort">Вид · чей</th><th class="nosort">Статус</th><th class="nosort num">Время</th><th class="nosort num">Ошибок</th></tr></thead>
+      <tbody>${runs.map(r => { const ee = effErrors({ ...r, errAlgs: r.errAlgs || (r.errors || []).map(e => e.alg || '') }); return `<tr style="cursor:default">
+        <td class="muted">${r.total ? r.idx : r.pos + 1}</td>
+        <td class="mono" style="font-size:11.5px">${r.guid ? esc(r.guid) : '<span class="faint">без GUID</span>'}${r.ps ? ` <span class="pill plain small">${esc(psLabel(r.ps))}</span>` : ''}<div class="faint">${fmtDT(r.startAt)}</div></td>
+        <td>${r.kindCode ? `<a href="#/${S.route}/k/${encodeURIComponent(r.kindCode)}">${esc(r.kindCode)}</a><div class="sub-line">${esc(kname(r.kindCode))}</div>${owner(r.kindCode)}
+            ${!r.guid ? `<button class="btn small ghost" data-act="unattribute" data-run="${r.id}" data-upload="${u.id}">изменить</button>` : ''}`
+        : r.guid ? '<span class="faint">не из списка видов</span>'
+          : `<div style="display:flex;gap:6px;flex-wrap:wrap"><input class="input" list="kindCodes" placeholder="Код вида" style="width:180px" data-attr-input="${r.id}" value="${esc(r.candidates[0] || '')}">
+            <button class="btn small primary" data-act="attribute" data-upload="${u.id}" data-run="${r.id}">Отнести</button></div>
+            ${r.candidates.length ? `<div class="sub-line" style="max-width:360px">Похожие по алгоритмам: ${r.candidates.slice(0, 4).map(esc).join(', ')}</div>` : ''}`}</td>
+        <td>${pill(r.finished ? (ee.eff ? 'errors' : 'ok') : 'interrupted')}</td>
+        <td class="num">${fmtSec(docSec(r))}</td><td class="num">${ee.eff ? `<span class="errn">${ee.eff}</span>` : 0}${ee.ign ? ` <span class="faint" title="пока не правим">+${ee.ign}</span>` : ''}</td></tr>`; }).join('')}</tbody></table></div>`,
+      '<button class="btn" data-act="closeModal">Закрыть</button>');
+  }
+
+  // =====================================================================================================================
+  // модальные окна
+  function modal(title, body, foot) {
+    closeModal();
+    const ov = document.createElement('div');
+    ov.className = 'modal-layer';
+    ov.innerHTML = `<div class="backdrop" data-act="closeModal"></div><div class="modal" role="dialog">
+      <div class="mh"><h3>${title}</h3><button class="btn ghost icon close-x" style="margin-left:auto" data-act="closeModal">${I.x}</button></div>
+      <div class="mb">${body}</div>${foot ? `<div class="mf">${foot}</div>` : ''}</div>`;
+    document.body.appendChild(ov);
+    return ov;
+  }
+  const closeModal = () => $$('.modal-layer').forEach(m => m.remove());
+
+  async function afterChange(msg) {
+    S.algs = null;
+    await safe(loadState);
+    renderShell();
+    renderPage();
+    if (S.kindOpen) await openKind(S.kindOpen);
+    if (msg) toast(msg);
+  }
+
+  function startReview() {
+    closeModal();
+    S.f.my.status = 'unreviewed';
+    S.f.my.q = '';
+    S.tab = 'overview';
+    location.hash = '#/my';
+    setTimeout(() => {
+      renderPage();
+      if (S.nav.length) go('my', S.nav[0]); else toast('Нечего проверять');
+    }, 0);
+  }
+
+  function algModal(a) {
+    const m = algMode(a);
+    const vi = m.v;
+    modal(`<span class="mono" style="font-size:15px">${esc(a.name)}</span>`, `<div class="meta-grid" style="margin-bottom:14px">
+        <div class="mg"><div class="l">Среднее</div><div class="v">${fmtSec(a.avgSec)}</div></div>
+        <div class="mg"><div class="l">Максимум</div><div class="v">${fmtSec(a.maxSec)}</div></div>
+        <div class="mg"><div class="l">Документов</div><div class="v">${a.docs}</div></div>
+        <div class="mg"><div class="l">С ошибкой</div><div class="v" style="color:${a.failed && !m.ign ? 'var(--err)' : 'inherit'}">${a.failed}${m.ign ? ' · не правим' : ''}</div></div></div>
+      ${m.ign ? `<div class="errbox ign" style="margin-bottom:12px"><b>Пока не правим</b> — ${esc(S.flags.get(a.name).note || 'ошибки не считаются, проверка вручную')} <span class="faint">(${esc(userName(S.flags.get(a.name).by))}, ${fmtDT(S.flags.get(a.name).at)})</span></div>` : ''}
+      ${vi ? `<div class="section" style="margin-top:0"><h4>Версии</h4>${(S.versions.get(a.name) || []).slice().reverse().map(v => `<div style="padding:6px 0;border-bottom:1px dashed var(--border);font-size:13px">
+          <b>v${v.version}</b> · ${fmtDT(v.at, true)}${v.deployId ? ` · <span style="color:var(--rev)">выложено ${fmtDT((S.deployById.get(v.deployId) || {}).at, true)}</span>` : ' · <span style="color:var(--int)">ждёт выкладки</span>'}${v.note ? ` — ${esc(v.note)}` : ''}${v.commit ? ` <span class="faint mono">${esc(v.commit.slice(0, 8))}</span>` : ''}</div>`).join('')}</div>` : ''}
+      <div class="section"><h4>Виды</h4>` +
+      a.kinds.map(c => { const k = kindByCode(c); return `<div style="display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)"><div><a href="#/algs/k/${encodeURIComponent(c)}" class="mono">${esc(c)}</a> <span class="muted">${esc(k ? k.name : '')}</span></div>${k ? pill(k.status) : ''}</div>`; }).join('') + '</div>',
+      '<button class="btn" data-act="closeModal">Закрыть</button>');
+  }
+
+  // =====================================================================================================================
+  // обработчики
+  document.addEventListener('click', async e => {
+    const t = e.target.closest('[data-act]');
+    const act = t && t.dataset.act;
+    if (S.menu && act !== 'menu' && !e.target.closest('.menu')) { S.menu = false; renderShell(); }
+    if (!act) {
+      if (e.target.closest('[data-stop]')) return;
+      const row = e.target.closest('tr[data-kind]');
+      if (row) { S.tab = 'overview'; go(S.route, row.dataset.kind); return; }
+      const ur = e.target.closest('tr[data-upload]');
+      if (ur) { openUpload(+ur.dataset.upload); return; }
+      const ar = e.target.closest('tr[data-alg]');
+      if (ar && S.algs) { const a = S.algs.find(x => x.name === ar.dataset.alg); if (a) algModal(a); }
+      return;
+    }
+    if (t.tagName === 'A') e.preventDefault();
+    switch (act) {
+      case 'theme': toggleTheme(); break;
+      case 'menu': S.menu = !S.menu; renderShell(); break;
+      case 'refresh': await afterChange('Данные обновлены'); break;
+      case 'logout': await DB.signOut(); S.me = null; S.menu = false; location.hash = ''; renderLogin(); break;
+      case 'csvAll': S.menu = false; renderShell(); exportCsv(null); break;
+      case 'pickFiles': pickFiles(''); break;
+      case 'startReview': startReview(); break;
+      case 'pw': S.menu = false; renderShell(); modal('Сменить пароль', `
+        <div class="grid" style="max-width:380px">
+          <input class="input" type="password" id="pwOld" placeholder="Текущий пароль" autocomplete="current-password">
+          <input class="input" type="password" id="pwNew" placeholder="Новый пароль (не короче 8 символов)" autocomplete="new-password">
+          <input class="input" type="password" id="pwNew2" placeholder="Новый пароль ещё раз" autocomplete="new-password">
+          <div id="pwErr" style="color:var(--err);min-height:20px"></div></div>`,
+        '<button class="btn" data-act="closeModal">Отмена</button><button class="btn primary" data-act="pwSave">Сохранить</button>');
+        $('#pwOld').focus();
+        break;
+      case 'pwSave': {
+        const n = $('#pwNew').value;
+        if (n.length < 8) { $('#pwErr').textContent = 'Новый пароль — не короче 8 символов'; break; }
+        if (n !== $('#pwNew2').value) { $('#pwErr').textContent = 'Пароли не совпадают'; break; }
+        try { await DB.changePassword(S.me, $('#pwOld').value, n); closeModal(); toast('Пароль изменён'); }
+        catch (err) { $('#pwErr').textContent = err.message; }
+        break;
+      }
+      case 'stage': {
+        const st = +t.dataset.st;
+        S.f[t.dataset.page].stage = st;
+        S.f[t.dataset.page].status = 'all';
+        renderShell();
+        renderPage();
+        break;
+      }
+      case 'status': {
+        const f = S.f[t.dataset.page];
+        f.status = t.classList.contains('stat-pill') && f.status === t.dataset.key ? 'all' : t.dataset.key;
+        if (S.route === 'team') { S.f.all.who = 'all'; S.f.all.stage = 1; go('all'); break; }
+        renderPage();
+        if (t.classList.contains('stat-pill')) { const tb = $('#tbl'); if (tb) tb.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+        break;
+      }
+      case 'sort': {
+        const s = S.sort[t.dataset.page];
+        if (s.key === t.dataset.key) s.dir = -s.dir;
+        else { s.key = t.dataset.key; s.dir = ['lastRunAt', 'docSec', 'errors', 'algCount'].includes(s.key) ? -1 : 1; }
+        refreshTable(t.dataset.page);
+        break;
+      }
+      case 'asort': {
+        const s = S.sort.algs;
+        if (s.key === t.dataset.key) s.dir = -s.dir; else { s.key = t.dataset.key; s.dir = t.dataset.key === 'name' ? 1 : -1; }
+        renderAlgs();
+        break;
+      }
+      case 'amode': S.f.algs.mode = t.dataset.key; renderAlgs(); break;
+      case 'ignore': {
+        const name = t.dataset.name;
+        if (!isDev()) break;
+        if (ignored(name)) {
+          await safe(() => DB.setAlgFlag(name, false, null, S.me.login));
+          await DB.addEvent({ by: S.me.login, text: `снова считает ошибки алгоритма ${name}` });
+          await afterChange('Ошибки алгоритма снова учитываются');
+        } else {
+          modal('Пока не правим', `<div class="mono" style="margin-bottom:10px">${esc(name)}</div>
+            <div class="muted" style="margin-bottom:10px;font-size:13px">Ошибки этого алгоритма перестанут считаться: документы с только такими ошибками станут «Выполнен», в «JSON с ошибками» и выгрузку ошибок они не попадут. Отметку можно снять в любой момент.</div>
+            <textarea class="input" id="ignNote" style="width:100%;min-height:70px" placeholder="Почему не правим / что проверять вручную (необязательно)"></textarea>`,
+          `<button class="btn" data-act="closeModal">Отмена</button><button class="btn primary" data-act="ignoreSave" data-name="${esc(name)}">${I.mute} Пока не правим</button>`);
+          $('#ignNote').focus();
+        }
+        break;
+      }
+      case 'ignoreSave': {
+        const name = t.dataset.name;
+        const note = $('#ignNote').value.trim();
+        t.disabled = true;
+        const ok = await safe(() => DB.setAlgFlag(name, true, note, S.me.login));
+        if (ok === undefined && !DB.demo) { /* ошибка уже показана */ }
+        closeModal();
+        await DB.addEvent({ by: S.me.login, text: `пока не правим ${name}${note ? ': ' + note : ''}` });
+        await afterChange('Отмечено: пока не правим');
+        break;
+      }
+      case 'deploy': {
+        const note = ($('#deployNote') || {}).value || '';
+        const n = new Set(S.pendingVers.map(v => v.name)).size;
+        if (!confirm(`Подтвердить, что ${n} ${plural(n, 'обновлённый алгоритм залит', 'обновлённых алгоритма залиты', 'обновлённых алгоритмов залиты')} на сервер ПКТС?\nПосле этого у всех откроется «JSON с ошибками» для перепрогона.`)) break;
+        t.disabled = true;
+        const id = await safe(() => DB.confirmDeploy(note));
+        if (id !== undefined) await afterChange('Выкладка подтверждена — можно перепрогонять документы с ошибками');
+        else t.disabled = false;
+        break;
+      }
+      case 'deployHistory':
+        modal('Выкладки алгоритмов на сервер', S.deploys.length ? `<div class="table-wrap"><table class="t"><thead><tr><th class="nosort">№</th><th class="nosort">Когда</th><th class="nosort">Кто</th><th class="nosort num">Алгоритмов</th><th class="nosort">Комментарий</th></tr></thead>
+          <tbody>${S.deploys.map(d => `<tr style="cursor:default"><td class="muted">${d.id}</td><td class="nowrap">${fmtDT(d.at, true)}</td><td>${who(d.by)}</td><td class="num">${d.algCount}</td><td>${esc(d.note || '')}</td></tr>`).join('')}</tbody></table></div>`
+          : '<div class="empty">Выкладок ещё не было</div>', '<button class="btn" data-act="closeModal">Закрыть</button>');
+        break;
+      case 'person': S.f.all.who = t.dataset.login; S.f.all.status = 'all'; S.f.all.stage = stage2Open(t.dataset.login) && hasStage2(t.dataset.login) ? 2 : 1; S.selected.clear(); go('all'); break;
+      case 'closeDrawer': closeDrawer(); break;
+      case 'closeModal': closeModal(); break;
+      case 'openUpload': closeModal(); openUpload(+t.dataset.id); break;
+      case 'tab': S.tab = t.dataset.tab; renderDrawer(); break;
+      case 'prev': navKind(-1); break;
+      case 'next': navKind(1); break;
+      case 'copy': try { await navigator.clipboard.writeText(t.dataset.text); toast('Скопировано'); } catch { } break;
+      case 'dlRemaining': {
+        const st = +t.dataset.st || 1;
+        const docs = remainingDocs(t.dataset.login, st);
+        if (!docs.length) { toast('Нечего запускать — всё выполнено'); break; }
+        await downloadBatch(t.dataset.login, st, docs, 'остаток');
+        break;
+      }
+      case 'dlErrors': {
+        const st = +t.dataset.st || 1;
+        const ed = errorDocs(t.dataset.login, st);
+        if (!ed.ready.length) { toast('Пока нечего перепрогонять: алгоритмы с ошибками ещё не исправлены и не выложены', true); break; }
+        await downloadBatch(t.dataset.login, st, ed.ready, 'перепрогон_ошибок');
+        break;
+      }
+      case 'dlFull': { const st = +t.dataset.st || 1; await downloadBatch(t.dataset.login, st, docsOf(t.dataset.login, st), ''); break; }
+      case 'dlCsv': exportCsv(t.dataset.login); break;
+      case 'raw': {
+        const u = S.uploadsList.find(x => x.id === +t.dataset.id);
+        const url = u && await safe(() => DB.rawUrl(u));
+        if (url) window.open(url, '_blank');
+        break;
+      }
+      case 'review': {
+        const code = S.kindOpen;
+        const stv = t.dataset.st;
+        const stage = +t.dataset.stage || 1;
+        const comment = $('#revComment').value.trim();
+        if (stv === 'issue' && !comment) { toast('Опишите замечание в комментарии', true); $('#revComment').focus(); break; }
+        t.disabled = true;
+        try {
+          await DB.setReview(code, stv ? { status: stv, comment, by: S.me.login, at: new Date().toISOString() } : { status: null, comment: null, by: null, at: null }, stage);
+        } catch (err) { toast(err.message, true); t.disabled = false; break; }
+        const sfx = stage === 2 ? ' (этап 2)' : '';
+        await DB.addEvent({ by: S.me.login, kind: code, text: stv === 'ok' ? `проверил(а) ${code}${sfx} — замечаний нет` : stv === 'issue' ? `замечание по ${code}${sfx}: ${comment}` : `снял(а) отметку проверки ${code}${sfx}` });
+        const pos = S.nav.indexOf(code);
+        const nextCode = stv && pref('autoNext', '1') === '1' ? S.nav[pos + 1] : null;
+        await afterChange(stv === 'ok' ? 'Отмечено: проверено' : stv === 'issue' ? 'Замечание сохранено' : 'Отметка снята');
+        if (nextCode) go(S.route, nextCode);
+        break;
+      }
+      case 'reassign': {
+        const to = $('#reassign').value || null;
+        await safe(() => DB.assign([S.kindOpen], to));
+        await DB.addEvent({ by: S.me.login, kind: S.kindOpen, text: `назначил(а) ${S.kindOpen} -> ${to ? userName(to) : 'без исполнителя'}` });
+        await afterChange('Исполнитель изменён');
+        break;
+      }
+      case 'sel': if (t.checked) S.selected.add(t.dataset.code); else S.selected.delete(t.dataset.code); refreshTable('all'); break;
+      case 'selAll': {
+        filterKinds(viewKinds(S.f.all.stage), S.f.all).forEach(k => t.checked ? S.selected.add(k.code) : S.selected.delete(k.code));
+        refreshTable('all');
+        break;
+      }
+      case 'bulkClear': S.selected.clear(); refreshTable('all'); break;
+      case 'bulkAssign': {
+        const to = $('#bulkTo').value || null;
+        const codes = [...S.selected];
+        await safe(() => DB.assign(codes, to));
+        await DB.addEvent({ by: S.me.login, text: `переназначил(а) ${codes.length} ${plural(codes.length, 'вид', 'вида', 'видов')} -> ${to ? userName(to) : 'без исполнителя'}` });
+        S.selected.clear();
+        await afterChange(`Переназначено: ${codes.length}`);
+        break;
+      }
+      case 'delUpload': {
+        const u = S.uploadsList.find(x => x.id === +t.dataset.id);
+        if (!u || !confirm(`Удалить протокол «${u.fileName}»? Отметки о выполнении из него пропадут.`)) break;
+        await safe(() => DB.deleteUpload(u));
+        await DB.addEvent({ by: S.me.login, uploadId: u.id, text: `удалил(а) протокол «${u.fileName}»` });
+        await afterChange('Протокол удалён');
+        break;
+      }
+      case 'attribute': case 'unattribute': {
+        const runId = +t.dataset.run;
+        let code = null;
+        if (act === 'attribute') {
+          code = $(`[data-attr-input="${runId}"]`).value.trim();
+          if (!S.kinds.some(k => k.code === code)) { toast('Нет такого кода вида', true); break; }
+        }
+        await safe(() => DB.updateRun(runId, { kindCode: code, match: code ? 'manual' : null }));
+        if (code) await DB.addEvent({ by: S.me.login, kind: code, uploadId: +t.dataset.upload, text: `отнес(ла) документ протокола №${t.dataset.upload} к виду ${code}` });
+        await afterChange(code ? 'Документ отнесён к ' + code : null);
+        openUpload(+t.dataset.upload);
+        break;
+      }
+    }
+  });
+
+  function refreshTable(page) {
+    const el = $('#tbl');
+    if (!el) return;
+    const base = page === 'my' ? myList() : viewKinds(S.f.all.stage);
+    el.innerHTML = kindsTable(filterKinds(base, S.f[page]), page);
+  }
+
+  document.addEventListener('input', e => {
+    const t = e.target;
+    if (t.dataset.act === 'q') { S.f[t.dataset.page].q = t.value; refreshTable(t.dataset.page); }
+    else if (t.dataset.act === 'aq') { S.f.algs.q = t.value; renderAlgs(); }
+  });
+
+  document.addEventListener('change', e => {
+    const t = e.target;
+    if (t.dataset.act === 'type') { S.f[t.dataset.page].type = t.value; renderPage(); }
+    else if (t.dataset.act === 'who') { S.f.all.who = t.value; S.selected.clear(); renderPage(); }
+    else if (t.dataset.act === 'autoNext') setPref('autoNext', t.checked ? '1' : '0');
+  });
+
+  document.addEventListener('keydown', e => {
+    const typing = document.activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName);
+    if (e.key === 'Escape') {
+      if (typing) { document.activeElement.blur(); return; }
+      if ($$('.modal-layer').length) closeModal();
+      else if (S.kindOpen) closeDrawer();
+      return;
+    }
+    if (typing || !S.me) return;
+    if (e.key === '/') {
+      const q = $('#q-' + (S.route === 'algs' ? 'algs' : S.route));
+      if (q) { e.preventDefault(); q.focus(); q.select(); }
+    } else if (S.kindOpen && !$$('.modal-layer').length && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
+      e.preventDefault();
+      navKind(e.key === 'ArrowRight' ? 1 : -1);
+    }
+  });
+
+  window.addEventListener('hashchange', () => { if (S.me) route(); });
+
+  // фоновое обновление: если кто-то загрузил протокол — у остальных страница обновится сама
+  setInterval(async () => {
+    if (!S.me || S.uploading || document.visibilityState !== 'visible' || S.kindOpen) return;
+    if ($$('.modal-layer').length || (document.activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName))) return;
+    try {
+      if (await loadState()) { S.algs = null; renderShell(); renderPage(); }
+    } catch { }
+  }, 60000);
+
+  applyTheme();
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+  (async () => {
+    try { await DB.init(); }
+    catch (e) { $('#app').innerHTML = `<div class="login-wrap"><div class="card card-pad" style="max-width:520px"><h2>Не удалось запуститься</h2><div style="color:var(--err)">${esc(e.message)}</div></div></div>`; return; }
+    await boot();
+  })();
+})();
+
+</script>
+</body>
+</html>
