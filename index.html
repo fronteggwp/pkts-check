@@ -638,20 +638,22 @@ const DB = (() => {
     kindCode: r.kind_code, match: r.match, candidates: r.candidates || [], errorCount: r.error_count || 0,
     warnings: r.warnings || 0, running: r.running || [], algs: r.algs, errors: r.errors,
     ps: r.ps || '', errAlgs: r.err_algs && r.err_algs.length ? r.err_algs : (r.error_count ? null : []), batchId: r.batch_id || null,
+    algNames: r.alg_names || [],
   });
   const runToRow = r => ({
     upload_id: r.uploadId, pos: r.pos, guid: r.guid, doctype: r.doctype, idx: r.idx, total: r.total, start_at: r.startAt,
     end_at: r.endAt, load_sec: r.loadSec, finished: r.finished, implicit: r.implicit, kind_code: r.kindCode, match: r.match,
     candidates: r.candidates || [], algs: r.algs || [], errors: r.errors || [], error_count: (r.errors || []).length,
     warnings: r.warnings || 0, running: r.running || [], ps: r.ps || '', err_algs: errAlgsOf(r.errors), batch_id: r.batchId || null,
+    alg_names: (r.algs || []).map(a => a.name),
   });
   const uploadFromRow = r => ({
     id: r.id, fileName: r.file_name, by: r.by_login, at: r.at, size: r.size, operations: r.operations || [], batch: r.batch,
     summary: r.summary, logFrom: r.log_from, logTo: r.log_to, storagePath: r.storage_path,
   });
   const eventFromRow = r => ({ id: r.id, at: r.at, by: r.by_login, text: r.text, kind: r.kind, uploadId: r.upload_id });
-  const LIGHT = 'id,upload_id,pos,guid,doctype,idx,total,start_at,end_at,load_sec,finished,implicit,kind_code,match,error_count,warnings,running,ps,err_algs,batch_id';
-  const versionFromRow = r => ({ id: r.id, name: r.name, version: r.version, note: r.note, at: r.created_at, by: r.created_by, deployId: r.deploy_id, commit: r.commit });
+  const LIGHT = 'id,upload_id,pos,guid,doctype,idx,total,start_at,end_at,load_sec,finished,implicit,kind_code,match,error_count,warnings,running,ps,err_algs,batch_id,alg_names';
+  const versionFromRow = r => ({ id: r.id, name: r.name, version: r.version, note: r.note, at: r.created_at, by: r.created_by, deployId: r.deploy_id, commit: r.commit, kind: r.kind || 'fix' });
   const deployFromRow = r => ({ id: r.id, at: r.at, by: r.by_login, note: r.note, algCount: r.alg_count });
   const flagFromRow = r => ({ name: r.name, ignored: r.ignored, note: r.note, by: r.by_login, at: r.at });
 
@@ -741,14 +743,16 @@ const DB = (() => {
       const [flags, versions, deploys] = await Promise.all([
         this.page(() => this.sb.from('alg_flags').select('*').order('name')),
         // версия 1 — исходное состояние; нужны только исправления и ещё не выложенное
-        this.page(() => this.sb.from('alg_versions').select('id,name,version,note,created_at,created_by,deploy_id,commit')
+        this.page(() => this.sb.from('alg_versions').select('id,name,version,note,created_at,created_by,deploy_id,commit,kind')
           .or('version.gt.1,deploy_id.is.null').order('id')),
         this.page(() => this.sb.from('deploys').select('*').order('id')),
       ]);
       return { flags: flags.map(flagFromRow), versions: versions.map(versionFromRow), deploys: deploys.map(deployFromRow) };
     }
-    async setAlgFlag(name, ignored, note, by) {
-      chk(await this.sb.from('alg_flags').upsert({ name, ignored, note: note || null, by_login: by, at: new Date().toISOString() }));
+    async setAlgFlags(names, ignored, note, by) {
+      const at = new Date().toISOString();
+      for (let i = 0; i < names.length; i += 200)
+        chk(await this.sb.from('alg_flags').upsert(names.slice(i, i + 200).map(name => ({ name, ignored, note: note || null, by_login: by, at }))));
     }
     async confirmDeploy(note) {
       return chk(await this.sb.rpc('confirm_deploy', { p_note: note || '' }));
@@ -852,7 +856,7 @@ const DB = (() => {
     async signOut() { this.st.me = null; this.save(); }
     async changePassword() { }
     async kinds() { return JSON.parse(JSON.stringify(this.st.kinds)); }
-    async runsLight() { return this.st.runs.map(r => ({ ...r, algs: undefined, errors: undefined, errAlgs: r.errAlgs || errAlgsOf(r.errors) })); }
+    async runsLight() { return this.st.runs.map(r => ({ ...r, algs: undefined, errors: undefined, errAlgs: r.errAlgs || errAlgsOf(r.errors), algNames: r.algNames || (r.algs || []).map(a => a.name) })); }
     async uploads() { return this.st.uploads.slice().reverse(); }
     async runsFull(f) {
       return this.st.runs.filter(r => (!f.kindCode || r.kindCode === f.kindCode) && (!f.uploadId || r.uploadId === f.uploadId) && (!f.ids || f.ids.includes(r.id)));
@@ -860,8 +864,9 @@ const DB = (() => {
     async runsAlgs(ids) { return this.st.runs.filter(r => ids.includes(r.id)); }
     async instances() { return this.st.instances; }
     async algMeta() { return { flags: this.st.flags, versions: this.st.versions, deploys: this.st.deploys }; }
-    async setAlgFlag(name, ignored, note, by) {
-      this.st.flags = this.st.flags.filter(f => f.name !== name).concat([{ name, ignored, note, by, at: new Date().toISOString() }]);
+    async setAlgFlags(names, ignored, note, by) {
+      const at = new Date().toISOString();
+      this.st.flags = this.st.flags.filter(f => !names.includes(f.name)).concat(names.map(name => ({ name, ignored, note, by, at })));
       this.save();
     }
     async confirmDeploy(note) {
@@ -883,7 +888,7 @@ const DB = (() => {
     async saveUpload(meta, runs) {
       const id = (this.st.uploads.reduce((m, u) => Math.max(m, u.id), 0)) + 1;
       this.st.uploads.push({ ...meta, id, at: new Date().toISOString() });
-      runs.forEach(r => this.st.runs.push({ ...r, id: this.st.nextId++, uploadId: id, errorCount: (r.errors || []).length, errAlgs: errAlgsOf(r.errors), ps: r.ps || '' }));
+      runs.forEach(r => this.st.runs.push({ ...r, id: this.st.nextId++, uploadId: id, errorCount: (r.errors || []).length, errAlgs: errAlgsOf(r.errors), algNames: (r.algs || []).map(a => a.name), ps: r.ps || '' }));
       this.save();
       return id;
     }
@@ -1065,30 +1070,31 @@ const DB = (() => {
   }
 
   // =====================================================================================================================
-  // алгоритмы: «пока не правим» и исправления
+  // алгоритмы: «не трогать» (отметка для разработчика) и исправления
   const ignored = name => !!(name && S.flags.get(name) && S.flags.get(name).ignored);
-  // ошибки прогона без учёта алгоритмов «пока не правим»
+  // ошибки прогона; «не трогать» — только отметка для разработчика: ошибки считаются, ign — сколько из них в таких алгоритмах
   function effErrors(r) {
     if (!r.errAlgs) return { eff: r.errorCount, ign: 0, algs: [] };   // старые записи без списка алгоритмов
-    const eff = r.errAlgs.filter(a => !ignored(a));
-    return { eff: eff.length, ign: r.errAlgs.length - eff.length, algs: [...new Set(eff.filter(Boolean))] };
+    return { eff: r.errAlgs.length, ign: r.errAlgs.filter(a => ignored(a)).length, algs: [...new Set(r.errAlgs.filter(Boolean))] };
   }
+  const SLOW_SEC = 300;   // «медленный» — алгоритм дольше 5 минут
   // исправлен ли алгоритм после прогона: deployed — новая версия уже на сервере (можно перепрогонять), pending — исправлен, ждёт выкладки
-  function algFix(name, runAt) {
+  function algFix(name, runAt, onlyPerf) {
     const vs = S.versions.get(name);
     if (!vs) return null;
     const t = ts(runAt);
     let res = null;
     for (const v of vs) {
+      if (onlyPerf && v.kind !== 'perf') continue;
       if (!v.deployId) { res = res || 'pending'; continue; }
       const d = S.deployById.get(v.deployId);
       if (d && ts(d.at) > t) return 'deployed';
     }
     return res;
   }
-  function fixOf(algs, runAt) {
+  function fixOf(algs, runAt, onlyPerf) {
     let res = null;
-    for (const a of algs) { const f = algFix(a, runAt); if (f === 'deployed') return 'deployed'; if (f) res = f; }
+    for (const a of algs) { const f = algFix(a, runAt, onlyPerf); if (f === 'deployed') return 'deployed'; if (f) res = f; }
     return res;
   }
   function verInfo(name) {
@@ -1097,7 +1103,7 @@ const DB = (() => {
     const last = vs[vs.length - 1];
     const pending = vs.some(v => !v.deployId);
     const dep = !pending && S.deployById.get(last.deployId);
-    return { last, pending, deploy: dep || null, notes: vs.map(v => `v${v.version}${v.note ? ': ' + v.note : ''}`).join('\n') };
+    return { last, pending, deploy: dep || null, perf: vs.some(v => v.kind === 'perf'), notes: vs.map(v => `v${v.version}${v.kind === 'perf' ? ' (оптимизация)' : ''}${v.note ? ': ' + v.note : ''}`).join('\n') };
   }
 
   // =====================================================================================================================
@@ -1114,6 +1120,7 @@ const DB = (() => {
       const e = effErrors(fin);
       Object.assign(st, { errors: e.eff, ignored: e.ign, errAlgs: e.algs, status: e.eff ? 'errors' : 'ok', sec: docSec(fin) });
       if (e.eff) st.fix = fixOf(e.algs, fin.startAt);
+      st.perf = fixOf(fin.algNames || [], fin.startAt, true);   // в документе выполнялись оптимизированные алгоритмы
     } else if (last) {
       st.status = 'interrupted';
       st.running = last.running && last.running.length ? last.running.join(', ') : null;
@@ -1122,7 +1129,7 @@ const DB = (() => {
   }
 
   function agg2(docs) {
-    const a = { total: docs.length, ok: 0, errors: 0, interrupted: 0, pending: 0, errSum: 0, ignSum: 0, secs: [], lastRunAt: null, firstDoneAt: null, fixDeployed: 0, fixPending: 0 };
+    const a = { total: docs.length, ok: 0, errors: 0, interrupted: 0, pending: 0, errSum: 0, ignSum: 0, secs: [], lastRunAt: null, firstDoneAt: null, fixDeployed: 0, fixPending: 0, perfDeployed: 0 };
     for (const d of docs) {
       a[d.st.status]++;
       a.errSum += d.st.errors;
@@ -1130,6 +1137,7 @@ const DB = (() => {
       if (d.st.sec != null) a.secs.push(d.st.sec);
       if (d.st.lastRunAt && ts(d.st.lastRunAt) > ts(a.lastRunAt)) a.lastRunAt = d.st.lastRunAt;
       if (d.st.fix === 'deployed') a.fixDeployed++; else if (d.st.fix === 'pending') a.fixPending++;
+      if (d.st.perf === 'deployed') a.perfDeployed++;
     }
     a.done = a.ok + a.errors;
     a.remaining = a.pending + a.interrupted;
@@ -1169,7 +1177,7 @@ const DB = (() => {
       return {
         ...k, algCount: k.algorithms.length, s1,
         status: l1.length ? s1.status : (k.guid ? 'pending' : 'noinstance'),
-        lastRunAt: s1.lastRunAt, docSec: s1.sec, errors: s1.errors, ignored: s1.ignored, fix: s1.fix,
+        lastRunAt: s1.lastRunAt, docSec: s1.sec, errors: s1.errors, ignored: s1.ignored, fix: s1.fix, perf: s1.perf,
         warnings: s1.fin ? s1.fin.warnings : 0, runs: l1.length, finRunId: s1.fin ? s1.fin.id : null,
         firstDoneAt: s1.firstDoneAt, running: s1.running,
         docs2, s2: agg2(docs2),
@@ -1204,7 +1212,7 @@ const DB = (() => {
     return {
       ...k, status: a.status, errors: a.errSum, ignored: a.ignSum, docSec: a.secs.length ? a.secs.reduce((x, y) => x + y, 0) / a.secs.length : null,
       lastRunAt: a.lastRunAt, running: null, progress: a,
-      fix: a.fixDeployed ? 'deployed' : a.fixPending ? 'pending' : null,
+      fix: a.fixDeployed ? 'deployed' : a.fixPending ? 'pending' : null, perf: a.perfDeployed ? 'deployed' : null,
       reviewStatus: k.review2Status, reviewComment: k.review2Comment, reviewBy: k.review2By, reviewAt: k.review2At,
     };
   }
@@ -1243,6 +1251,11 @@ const DB = (() => {
       : mine.filter(k => k.guid).map(k => ({ kind: k.code, doctype: k.doctype, guid: k.guid, ps: '', st: k.s1 }));
   }
   const remainingDocs = (login, stage) => docsOf(login, stage).filter(d => d.st.status === 'pending' || d.st.status === 'interrupted');
+  // документы, где выполнялись оптимизированные алгоритмы: перепроверить после выкладки
+  function perfDocs(login, stage) {
+    const e = docsOf(login, stage).filter(d => d.st.perf);
+    return { all: e, ready: e.filter(d => d.st.perf === 'deployed'), waiting: e.filter(d => d.st.perf === 'pending') };
+  }
   function errorDocs(login, stage) {
     const e = docsOf(login, stage).filter(d => d.st.status === 'errors');
     return { all: e, ready: e.filter(d => d.st.fix === 'deployed'), waiting: e.filter(d => d.st.fix === 'pending'), open: e.filter(d => !d.st.fix) };
@@ -1274,7 +1287,7 @@ const DB = (() => {
   function exportCsv(login) {
     const q = s => '"' + String(s ?? '').replace(/"/g, '""') + '"';
     const rows = [['Код вида', 'Наименование', 'Тип', 'Исполнитель', 'GUID экземпляра', 'Алгоритмов', 'Статус', 'Последний прогон', 'Время документа, с', 'Ошибок',
-      'Ошибок «не правим»', 'Проверка', 'Комментарий', 'Проверил', 'Этап 2: документов', 'Этап 2: выполнено', 'Этап 2: с ошибками', 'Этап 2: проверка'].map(q).join(';')];
+      'Ошибок в «не трогать»', 'Проверка', 'Комментарий', 'Проверил', 'Этап 2: документов', 'Этап 2: выполнено', 'Этап 2: с ошибками', 'Этап 2: проверка'].map(q).join(';')];
     S.kinds.filter(k => !login || k.assignee === login).forEach(k => rows.push([
       q(k.code), q(k.name), q(typeRu(k.doctype, k.category)), q(k.assignee ? userName(k.assignee) : ''), q(k.guid), k.algCount, q(STATUS[k.status].label),
       q(k.lastRunAt ? fmtDT(k.lastRunAt, true) : ''), k.docSec != null ? String(Math.round(k.docSec * 10) / 10).replace('.', ',') : '', k.errors, k.ignored,
@@ -1491,6 +1504,9 @@ const DB = (() => {
     const n = s.remaining;
     const mine = login === S.me.login;
     const ed = errorDocs(login, stage);
+    const pd = perfDocs(login, stage);
+    const pdWhy = pd.ready.length ? `Оптимизировано и выложено — перепроверить: <b style="color:var(--text)">${pd.ready.length}</b> ${plural(pd.ready.length, 'документ', 'документа', 'документов')}.`
+      : pd.waiting.length ? `Оптимизация в ${pd.waiting.length} ${plural(pd.waiting.length, 'документе', 'документах', 'документах')} ждёт выкладки на сервер — потом откроется «JSON с оптимизированными».` : '';
     const why = !ed.all.length ? 'Документов с ошибками нет.'
       : ed.ready.length ? `Исправлено и выложено на сервер: <b style="color:var(--text)">${ed.ready.length}</b> из ${ed.all.length} с ошибками.${ed.waiting.length ? ` Ещё ${ed.waiting.length} — исправлены, ждут выкладки.` : ''}`
         : ed.waiting.length ? `Алгоритмы ${ed.waiting.length} ${plural(ed.waiting.length, 'документа', 'документов', 'документов')} уже исправлены, но ещё не залиты на сервер — кнопка откроется, когда разработчик подтвердит выкладку.`
@@ -1502,10 +1518,11 @@ const DB = (() => {
         <div class="acts">
           <button class="btn primary" data-act="dlRemaining" data-login="${esc(login)}" data-st="${stage}" ${n ? '' : 'disabled'}>${I.dl}JSON остатка</button>
           <button class="btn" data-act="dlErrors" data-login="${esc(login)}" data-st="${stage}" ${ed.ready.length ? '' : 'disabled'} title="Перепрогон документов, у которых алгоритмы с ошибками исправлены и выложены на сервер">${I.rerun}JSON с ошибками${ed.ready.length ? ` (${ed.ready.length})` : ''}</button>
+          <button class="btn" data-act="dlPerf" data-login="${esc(login)}" data-st="${stage}" ${pd.ready.length ? '' : 'disabled'} title="Перепроверка документов, где выполнялись оптимизированные и уже выложенные алгоритмы">${I.rerun}JSON с оптимизированными${pd.ready.length ? ` (${pd.ready.length})` : ''}</button>
           <button class="btn small ghost" data-act="dlFull" data-login="${esc(login)}" data-st="${stage}" title="Все назначенные документы этапа">полный JSON</button>
           <button class="btn small ghost" data-act="dlCsv" data-login="${esc(login)}">таблица CSV</button>
         </div>
-        <div class="why">${why}</div>
+        <div class="why">${why}${pdWhy ? '<br>' + pdWhy : ''}</div>
       </div>
       <div class="card step">
         <div class="t"><span class="n">2</span>Запустите в ПКТС 2.0</div>
@@ -1593,14 +1610,14 @@ const DB = (() => {
     return list.slice().sort((a, b) => { const x = v(a), y = v(b); return x < y ? -dir : x > y ? dir : (a.code < b.code ? -1 : 1); });
   }
 
-  // подпись под статусом: исправлено / ждёт выкладки / ошибки «не правим» / обрыв
+  // подпись под статусом: исправлено / оптимизировано / ждёт выкладки / обрыв
   function statusNote(k) {
     if (k.status === 'errors' || k.status === 'partial') {
       if (k.fix === 'deployed') return `<div class="sub-line" style="color:var(--rev)">исправлено — перепрогнать</div>`;
       if (k.fix === 'pending') return `<div class="sub-line" style="color:var(--int)">исправлено, ждёт выкладки</div>`;
     }
+    if (k.perf === 'deployed') return `<div class="sub-line" style="color:var(--rev)">оптимизировано — перепроверить</div>`;
     if (k.running) return `<div class="sub-line" title="${esc(k.running)}">обрыв: ${esc(k.running.split(',')[0])}</div>`;
-    if (k.ignored && !k.errors && (k.status === 'ok')) return `<div class="sub-line" title="Ошибки в алгоритмах, отмеченных «пока не правим»">«не правим»: ${k.ignored}</div>`;
     return '';
   }
 
@@ -1802,7 +1819,7 @@ const DB = (() => {
   }
 
   // =====================================================================================================================
-  // алгоритмы: время, ошибки, «пока не правим», версии и выкладка на сервер
+  // алгоритмы: время, ошибки, медленные, «не трогать», версии и выкладка на сервер
   function pageAlgs() {
     return `
       <div class="page-title"><h1>Алгоритмы</h1><span class="sub">время и ошибки — по последнему завершённому прогону каждого документа · нажмите на строку — увидите виды</span></div>
@@ -1824,7 +1841,7 @@ const DB = (() => {
     const names = [...new Set(pend.map(v => v.name))];
     return `<div class="card deploy-card">
       <div class="txt"><b>${I.server} Обновлено ${names.length} ${plural(names.length, 'алгоритм', 'алгоритма', 'алгоритмов')} — ещё не залиты на сервер</b>
-        <div class="muted" style="margin-top:4px;font-size:13px">Залейте файлы на сервер ПКТС и нажмите кнопку — у всех откроется «JSON с ошибками» для перепрогона документов, где эти алгоритмы падали.</div>
+        <div class="muted" style="margin-top:4px;font-size:13px">Залейте файлы на сервер ПКТС и нажмите кнопку — у всех откроются «JSON с ошибками» и «JSON с оптимизированными» для перепрогона документов, где работали эти алгоритмы.</div>
         <details><summary>Что обновлено</summary><div class="vlist">${pend.map(v => `<div><span class="mono">${esc(v.name)}</span> <span class="faint">v${v.version}${v.at ? ' · ' + fmtDT(v.at) : ''}</span>${v.note ? ` — ${esc(v.note)}` : ''}</div>`).join('')}</div></details>
         <div class="why">${lastLine}${S.deploys.length ? ` · <a href="#" data-act="deployHistory">история</a>` : ''}</div></div>
       <div class="act">${isDev()
@@ -1842,37 +1859,42 @@ const DB = (() => {
         if (!part) return;
         rows.push(...part);
       }
+      const startOf = new Map(S.runs.map(r => [r.id, ts(r.startAt)]));
       const acc = new Map();
-      const get = name => { let x = acc.get(name); if (!x) acc.set(name, x = { name, docs: 0, count: 0, totalSec: 0, maxSec: 0, failed: 0, kinds: new Set() }); return x; };
+      const get = name => { let x = acc.get(name); if (!x) acc.set(name, x = { name, docs: 0, count: 0, totalSec: 0, maxSec: 0, failed: 0, kinds: new Set(), lastSec: null, lastAt: 0 }); return x; };
       for (const r of rows) for (const a of (r.algs || [])) {
         const x = get(a.name);
         x.docs++; x.count += a.count; x.totalSec += a.totalSec; x.maxSec = Math.max(x.maxSec, a.maxSec); if (a.failed) x.failed++;
         x.kinds.add(r.kindCode);
+        const t = startOf.get(r.id) || 0;   // время в последнем по времени прогоне
+        if (t >= x.lastAt) { x.lastAt = t; x.lastSec = a.totalSec; }
       }
       S.versions.forEach((vs, name) => get(name));   // исправленные, даже если ещё не запускались
-      S.algs = [...acc.values()].map(x => ({ ...x, kinds: [...x.kinds], avgSec: x.count ? x.totalSec / x.count : 0 }));
+      S.algs = [...acc.values()].map(x => ({ ...x, kinds: [...x.kinds], avgSec: x.count ? x.totalSec / x.count : 0, lastSec: x.lastSec ?? -1 }));
     }
     renderAlgs();
   }
 
   function algMode(a) {
     const v = verInfo(a.name);
-    return { ign: ignored(a.name), failed: a.failed > 0, pending: !!(v && v.pending), deployed: !!(v && !v.pending && v.last.version > 1), v };
+    return { ign: ignored(a.name), failed: a.failed > 0, slow: a.maxSec >= SLOW_SEC, pending: !!(v && v.pending), deployed: !!(v && !v.pending && v.last.version > 1), v };
   }
 
   function renderAlgs() {
     const el = $('#algs');
     if (!el || !S.algs) return;
+    S.algSel = S.algSel || new Set();
     const q = S.f.algs.q.trim().toLowerCase();
     const mode = S.f.algs.mode;
     const s = S.sort.algs;
     const withMode = S.algs.map(a => ({ a, m: algMode(a) }));
-    const counts = { all: withMode.length, failed: 0, ignored: 0, pending: 0, deployed: 0 };
-    withMode.forEach(({ m }) => { if (m.failed && !m.ign) counts.failed++; if (m.ign) counts.ignored++; if (m.pending) counts.pending++; if (m.deployed) counts.deployed++; });
+    const counts = { all: withMode.length, failed: 0, slow: 0, ignored: 0, pending: 0, deployed: 0 };
+    withMode.forEach(({ m }) => { if (m.failed) counts.failed++; if (m.slow) counts.slow++; if (m.ign) counts.ignored++; if (m.pending) counts.pending++; if (m.deployed) counts.deployed++; });
     const mb = (key, label, col) => `<button class="${mode === key ? 'on' : ''}" data-act="amode" data-key="${key}">${col ? `<span class="dot" style="background:${col}"></span>` : ''}${label}<span class="n">${counts[key]}</span></button>`;
-    $('#algModes').innerHTML = mb('all', 'Все') + mb('failed', 'С ошибками', 'var(--err)') + mb('ignored', 'Пока не правим', 'var(--faint)') + mb('pending', 'Ждут выкладки', 'var(--int)') + mb('deployed', 'Исправлены', 'var(--rev)');
+    $('#algModes').innerHTML = mb('all', 'Все') + mb('failed', 'С ошибками', 'var(--err)') + mb('slow', 'Медленные (≥ 5 мин)', 'var(--int)')
+      + mb('ignored', 'Не трогать', 'var(--faint)') + mb('pending', 'Ждут выкладки', 'var(--int)') + mb('deployed', 'Исправлены', 'var(--rev)');
     const list = withMode.filter(({ a, m }) => (!q || a.name.toLowerCase().includes(q))
-      && (mode === 'all' || (mode === 'failed' && m.failed && !m.ign) || (mode === 'ignored' && m.ign) || (mode === 'pending' && m.pending) || (mode === 'deployed' && m.deployed)))
+      && (mode === 'all' || (mode === 'failed' && m.failed) || (mode === 'slow' && m.slow) || (mode === 'ignored' && m.ign) || (mode === 'pending' && m.pending) || (mode === 'deployed' && m.deployed)))
       .sort((x, y) => (x.a[s.key] < y.a[s.key] ? -1 : x.a[s.key] > y.a[s.key] ? 1 : 0) * s.dir);
     const max = Math.max(1, ...S.algs.map(a => a.maxSec));
     const tot = S.algs.reduce((x, a) => x + a.totalSec, 0);
@@ -1881,23 +1903,33 @@ const DB = (() => {
     if (!list.length) { el.innerHTML = '<div class="card"><div class="empty"><div class="ico">🔎</div>Ничего не найдено</div></div>'; return; }
     const th = (key, label, cls = '') => `<th class="${cls}" data-act="asort" data-key="${key}">${label}${s.key === key ? `<span class="arr">${s.dir > 0 ? '↑' : '↓'}</span>` : ''}</th>`;
     const dev = isDev();
+    const shown = list.slice(0, 800);
+    const allSel = dev && shown.every(({ a }) => S.algSel.has(a.name));
     const verCell = m => !m.v ? '<span class="faint">—</span>'
-      : m.v.pending ? `<span class="pill fixp small" title="${esc(m.v.notes)}">v${m.v.last.version} · ждёт выкладки</span>`
-        : m.v.last.version > 1 ? `<span class="pill fixd small" title="${esc(m.v.notes)}">v${m.v.last.version} · ${m.v.deploy ? fmtDT(m.v.deploy.at) : 'выложено'}</span>` : '<span class="faint">v1</span>';
+      : m.v.pending ? `<span class="pill fixp small" title="${esc(m.v.notes)}">v${m.v.last.version} · ${m.v.last.kind === 'perf' ? 'оптимизация' : 'исправление'}, ждёт выкладки</span>`
+        : m.v.last.version > 1 ? `<span class="pill fixd small" title="${esc(m.v.notes)}">v${m.v.last.version} · ${m.v.last.kind === 'perf' ? 'оптимизирован' : 'исправлен'} ${m.v.deploy ? fmtDT(m.v.deploy.at) : ''}</span>` : '<span class="faint">v1</span>';
+    const flagTitle = name => { const f = S.flags.get(name); return f ? esc(`Не трогать — ${userName(f.by)}, ${fmtDT(f.at)}${f.note ? ': ' + f.note : ''}`) : ''; };
     el.innerHTML = `<div class="card table-wrap"><table class="t"><thead><tr>
-      ${th('name', 'Алгоритм')}${th('docs', 'Док.', 'num')}${th('avgSec', 'Среднее', 'num')}
-      ${th('maxSec', 'Максимум', 'num')}<th class="nosort" style="width:140px"></th>${th('totalSec', 'Всего', 'num')}${th('failed', 'С ошибкой', 'num')}
-      <th class="nosort">Версия</th><th class="nosort">Ошибки</th></tr></thead>
-      <tbody>${list.slice(0, 800).map(({ a, m }) => `<tr data-alg="${esc(a.name)}">
-        <td class="mono">${esc(a.name)}${S.links && S.links.has(a.name.toLowerCase()) ? ' <span class="faint">(связи)</span>' : ''}</td><td class="num">${a.docs}</td>
-        <td class="num">${fmtSec(a.avgSec)}</td><td class="num"><b>${fmtSec(a.maxSec)}</b></td>
-        <td><div class="alg-bar ${a.failed && !m.ign ? 'f' : ''}" style="width:${Math.max(1, (a.maxSec / max) * 100)}%"></div></td>
+      ${dev ? `<th class="nosort" style="width:36px"><input type="checkbox" data-act="aselAll" ${allSel ? 'checked' : ''} title="Выбрать все показанные"></th>` : ''}
+      ${th('name', 'Алгоритм')}${th('docs', 'Док.', 'num')}${th('lastSec', 'Последний', 'num')}${th('avgSec', 'Среднее', 'num')}
+      ${th('maxSec', 'Максимум', 'num')}<th class="nosort" style="width:120px"></th>${th('totalSec', 'Всего', 'num')}${th('failed', 'С ошибкой', 'num')}
+      <th class="nosort">Версия</th></tr></thead>
+      <tbody>${shown.map(({ a, m }) => `<tr data-alg="${esc(a.name)}" class="${S.algSel.has(a.name) ? 'sel' : ''}">
+        ${dev ? `<td data-stop="1"><input type="checkbox" data-act="asel" data-name="${esc(a.name)}" ${S.algSel.has(a.name) ? 'checked' : ''}></td>` : ''}
+        <td class="mono">${esc(a.name)}${S.links && S.links.has(a.name.toLowerCase()) ? ' <span class="faint">(связи)</span>' : ''}
+          ${m.slow ? ' <span class="pill fixp small" title="Дольше 5 минут — кандидат на оптимизацию">медленный</span>' : ''}${m.ign ? ` <span class="pill ign small" title="${flagTitle(a.name)}">${I.mute} не трогать</span>` : ''}</td>
+        <td class="num">${a.docs}</td>
+        <td class="num">${a.lastSec >= 0 ? fmtSec(a.lastSec) : '<span class="faint">—</span>'}</td>
+        <td class="num">${fmtSec(a.avgSec)}</td><td class="num"><b style="${m.slow ? 'color:var(--int)' : ''}">${fmtSec(a.maxSec)}</b></td>
+        <td><div class="alg-bar ${a.failed ? 'f' : ''}" style="width:${Math.max(1, (a.maxSec / max) * 100)}%"></div></td>
         <td class="num">${fmtSec(a.totalSec)}</td>
-        <td class="num">${a.failed ? (m.ign ? `<span class="muted" title="пока не правим">${a.failed}</span>` : `<span class="errn">${a.failed}</span>`) : '<span class="faint">0</span>'}</td>
-        <td class="nowrap">${verCell(m)}</td>
-        <td data-stop="1" class="nowrap">${m.ign || (dev && a.failed)
-          ? `<button class="tgl ${m.ign ? 'on' : ''}" data-act="ignore" data-name="${esc(a.name)}" ${dev ? '' : 'disabled'} title="${m.ign ? esc((S.flags.get(a.name).note || 'Ошибки не считаются, проверка вручную') + ' · ' + userName(S.flags.get(a.name).by)) : 'Ошибки этого алгоритма не будут считаться (проверка вручную)'}">${I.mute}${m.ign ? 'не правим' : 'пока не правим'}</button>`
-          : ''}</td></tr>`).join('')}</tbody></table></div>`;
+        <td class="num">${a.failed ? `<span class="errn">${a.failed}</span>` : '<span class="faint">0</span>'}</td>
+        <td class="nowrap">${verCell(m)}</td></tr>`).join('')}</tbody></table></div>
+      ${dev && S.algSel.size ? `<div class="bulkbar">Выбрано: <b>${S.algSel.size}</b>
+        <button class="btn primary small" data-act="aflag" data-on="1">${I.mute} Не трогать</button>
+        <button class="btn small" data-act="aflag" data-on="0">Снять «не трогать»</button>
+        <button class="btn small" data-act="aselClear">Снять выбор</button>
+        <span style="opacity:.75;font-size:12.5px">отметка для разработчика: статусы не меняются, в выгрузку ошибок и медленных такие алгоритмы не попадают</span></div>` : ''}`;
   }
 
   // =====================================================================================================================
@@ -1922,11 +1954,11 @@ const DB = (() => {
     renderDrawer();
   }
 
-  // ошибка с пометками: «не правим», исправлено и выложено / ждёт выкладки
+  // ошибка с пометками: «не трогать», исправлено и выложено / ждёт выкладки
   function errBox(e, runAt) {
     const ign = ignored(e.alg);
     const fx = e.alg && !ign ? algFix(e.alg, runAt) : null;
-    const tags = (ign ? '<span class="pill ign small">не правим</span>' : '')
+    const tags = (ign ? '<span class="pill ign small">не трогать</span>' : '')
       + (fx === 'deployed' ? '<span class="pill fixd small">исправлено — перепрогнать</span>' : fx === 'pending' ? '<span class="pill fixp small">исправлено, ждёт выкладки</span>' : '');
     return `<div class="errbox ${ign ? 'ign' : ''}"><div class="a">${esc(e.alg || 'Документ')}${tags ? `<span class="tags">${tags}</span>` : ''}</div><div style="margin-top:3px">${esc(e.message)}</div>
       ${e.details ? `<details><summary>Подробности и стек</summary><pre>${esc(e.details)}</pre></details>` : ''}</div>`;
@@ -1994,7 +2026,7 @@ const DB = (() => {
           ${last ? `<div class="meta-grid">
             <div class="mg"><div class="l">Когда</div><div class="v">${fmtDT(last.startAt, true)}</div></div>
             <div class="mg"><div class="l">Время документа</div><div class="v">${fmtSec(docSec(lastFin || last))}</div></div>
-            <div class="mg"><div class="l">Ошибок</div><div class="v" style="color:${k.errors ? 'var(--err)' : 'inherit'}">${k.errors}${k.ignored ? ` <span class="faint" style="font-weight:500">+ ${k.ignored} «не правим»</span>` : ''}</div></div>
+            <div class="mg"><div class="l">Ошибок</div><div class="v" style="color:${k.errors ? 'var(--err)' : 'inherit'}">${k.errors}${k.ignored ? ` <span class="faint" style="font-weight:500">из них ${k.ignored} в «не трогать»</span>` : ''}</div></div>
             <div class="mg"><div class="l">Алгоритмов отработало</div><div class="v">${algs.filter(x => x.ran).length} из ${own.length}${notRan && lastFin ? ` <span class="faint" style="font-weight:500">(не запускались ${notRan})</span>` : ''}</div></div>
           </div>
           ${!lastFin && last.running && last.running.length ? `<div class="errbox warn" style="margin-top:12px"><div class="a" style="color:var(--int);font-family:var(--font)">Протокол оборвался во время выполнения:</div><div class="mono" style="margin-top:4px">${last.running.map(esc).join('<br>')}</div></div>` : ''}
@@ -2019,7 +2051,7 @@ const DB = (() => {
           <td>${pill(d.st.last ? d.st.status : (d.guid ? 'pending' : 'noinstance'))}${d.st.fix === 'deployed' ? '<div class="sub-line" style="color:var(--rev)">исправлено — перепрогнать</div>' : d.st.fix === 'pending' ? '<div class="sub-line" style="color:var(--int)">ждёт выкладки</div>' : ''}</td>
           <td class="nowrap muted">${d.st.lastRunAt ? fmtDT(d.st.lastRunAt) : '—'}</td>
           <td class="num">${fmtSec(d.st.sec)}</td>
-          <td class="num">${d.st.errors ? `<span class="errn">${d.st.errors}</span>` : d.st.fin ? '0' : '—'}${d.st.ignored ? ` <span class="faint" title="пока не правим">+${d.st.ignored}</span>` : ''}</td></tr>`).join('')}</tbody></table></div>`
+          <td class="num">${d.st.errors ? `<span class="errn">${d.st.errors}</span>` : d.st.fin ? '0' : '—'}${d.st.ignored ? ` <span class="faint" title="из них в алгоритмах «не трогать»">(${d.st.ignored} не тр.)</span>` : ''}</td></tr>`).join('')}</tbody></table></div>`
         : '<div class="empty"><div class="ico">📄</div>Нет документов</div>';
     } else if (tab === 'errors') {
       body = errDocs.length ? errDocs.map(d => { const r = finOf(d); return `<div class="doc-h">${docLabel(d)} <span class="faint">${fmtDT(r.startAt, true)}</span></div>${(r.errors || []).map(e => errBox(e, r.startAt)).join('')}`; }).join('')
@@ -2027,8 +2059,8 @@ const DB = (() => {
     } else if (tab === 'algs') {
       body = `${algRun && algRun !== lastFin ? '<div class="faint" style="margin-bottom:8px;font-size:12.5px">по документу этапа 2</div>' : ''}<div class="table-wrap"><table class="t"><thead><tr><th class="nosort">Алгоритм</th><th class="nosort num">Запусков</th><th class="nosort num">Время</th><th class="nosort" style="width:130px"></th><th class="nosort num">Макс.</th></tr></thead>
         <tbody>${algs.map(a => { const vi = verInfo(a.name); return `<tr style="cursor:default">
-          <td class="mono">${a.failed ? (ignored(a.name) ? '<span class="faint" title="ошибка, пока не правим">✗</span>' : '<span style="color:var(--err)" title="ошибка">✗</span>') : a.ran ? '<span style="color:var(--ok)">✓</span>' : '<span class="faint" title="не запускался">·</span>'} ${esc(a.name)}${LogParser.isLink(S.links, a.name) ? ' <span class="faint">(связи)</span>' : a.inKind ? '' : ' <span class="faint">(общий)</span>'}
-            ${ignored(a.name) ? ' <span class="pill ign small">не правим</span>' : ''}${vi && vi.last.version > 1 || vi && vi.pending ? ` <span class="pill ${vi.pending ? 'fixp' : 'fixd'} small" title="${esc(vi.notes)}">v${vi.last.version}</span>` : ''}</td>
+          <td class="mono">${a.failed ? (ignored(a.name) ? '<span class="faint" title="ошибка (не трогать)">✗</span>' : '<span style="color:var(--err)" title="ошибка">✗</span>') : a.ran ? '<span style="color:var(--ok)">✓</span>' : '<span class="faint" title="не запускался">·</span>'} ${esc(a.name)}${LogParser.isLink(S.links, a.name) ? ' <span class="faint">(связи)</span>' : a.inKind ? '' : ' <span class="faint">(общий)</span>'}
+            ${a.ran && a.maxSec >= SLOW_SEC ? ' <span class="pill fixp small">медленный</span>' : ''}${ignored(a.name) ? ' <span class="pill ign small">не трогать</span>' : ''}${vi && vi.last.version > 1 || vi && vi.pending ? ` <span class="pill ${vi.pending ? 'fixp' : 'fixd'} small" title="${esc(vi.notes)}">v${vi.last.version}</span>` : ''}</td>
           <td class="num">${a.ran ? a.count : '—'}</td><td class="num">${a.ran ? fmtSec(a.totalSec) : '—'}</td>
           <td>${a.ran ? `<div class="alg-bar ${a.failed && !ignored(a.name) ? 'f' : ''}" style="width:${Math.max(2, (a.totalSec / maxAlg) * 100)}%"></div>` : ''}</td>
           <td class="num">${a.ran ? fmtSec(a.maxSec) : '—'}</td></tr>`; }).join('')}</tbody></table></div>`;
@@ -2260,7 +2292,7 @@ const DB = (() => {
             <button class="btn small primary" data-act="attribute" data-upload="${u.id}" data-run="${r.id}">Отнести</button></div>
             ${r.candidates.length ? `<div class="sub-line" style="max-width:360px">Похожие по алгоритмам: ${r.candidates.slice(0, 4).map(esc).join(', ')}</div>` : ''}`}</td>
         <td>${pill(r.finished ? (ee.eff ? 'errors' : 'ok') : 'interrupted')}</td>
-        <td class="num">${fmtSec(docSec(r))}</td><td class="num">${ee.eff ? `<span class="errn">${ee.eff}</span>` : 0}${ee.ign ? ` <span class="faint" title="пока не правим">+${ee.ign}</span>` : ''}</td></tr>`; }).join('')}</tbody></table></div>`,
+        <td class="num">${fmtSec(docSec(r))}</td><td class="num">${ee.eff ? `<span class="errn">${ee.eff}</span>` : 0}${ee.ign ? ` <span class="faint" title="из них в алгоритмах «не трогать»">(${ee.ign} не тр.)</span>` : ''}</td></tr>`; }).join('')}</tbody></table></div>`,
       '<button class="btn" data-act="closeModal">Закрыть</button>');
   }
 
@@ -2305,9 +2337,11 @@ const DB = (() => {
     modal(`<span class="mono" style="font-size:15px">${esc(a.name)}</span>`, `<div class="meta-grid" style="margin-bottom:14px">
         <div class="mg"><div class="l">Среднее</div><div class="v">${fmtSec(a.avgSec)}</div></div>
         <div class="mg"><div class="l">Максимум</div><div class="v">${fmtSec(a.maxSec)}</div></div>
+        <div class="mg"><div class="l">Последний прогон</div><div class="v">${a.lastSec >= 0 ? fmtSec(a.lastSec) : '—'}</div></div>
         <div class="mg"><div class="l">Документов</div><div class="v">${a.docs}</div></div>
-        <div class="mg"><div class="l">С ошибкой</div><div class="v" style="color:${a.failed && !m.ign ? 'var(--err)' : 'inherit'}">${a.failed}${m.ign ? ' · не правим' : ''}</div></div></div>
-      ${m.ign ? `<div class="errbox ign" style="margin-bottom:12px"><b>Пока не правим</b> — ${esc(S.flags.get(a.name).note || 'ошибки не считаются, проверка вручную')} <span class="faint">(${esc(userName(S.flags.get(a.name).by))}, ${fmtDT(S.flags.get(a.name).at)})</span></div>` : ''}
+        <div class="mg"><div class="l">С ошибкой</div><div class="v" style="color:${a.failed && !m.ign ? 'var(--err)' : 'inherit'}">${a.failed}${m.ign ? ' · не трогать' : ''}</div></div></div>
+      ${m.ign ? `<div class="errbox ign" style="margin-bottom:12px"><b>Не трогать</b> — отметка для разработчика: в выгрузку ошибок и медленных не попадает${S.flags.get(a.name).note ? ' · ' + esc(S.flags.get(a.name).note) : ''} <span class="faint">(${esc(userName(S.flags.get(a.name).by))}, ${fmtDT(S.flags.get(a.name).at)})</span></div>` : ''}
+      ${m.slow ? `<div class="errbox warn" style="margin-bottom:12px"><b>Медленный</b> — максимум ${fmtSec(a.maxSec)}, последний прогон ${a.lastSec >= 0 ? fmtSec(a.lastSec) : '—'}: кандидат на оптимизацию</div>` : ''}
       ${vi ? `<div class="section" style="margin-top:0"><h4>Версии</h4>${(S.versions.get(a.name) || []).slice().reverse().map(v => `<div style="padding:6px 0;border-bottom:1px dashed var(--border);font-size:13px">
           <b>v${v.version}</b> · ${fmtDT(v.at, true)}${v.deployId ? ` · <span style="color:var(--rev)">выложено ${fmtDT((S.deployById.get(v.deployId) || {}).at, true)}</span>` : ' · <span style="color:var(--int)">ждёт выкладки</span>'}${v.note ? ` — ${esc(v.note)}` : ''}${v.commit ? ` <span class="faint mono">${esc(v.commit.slice(0, 8))}</span>` : ''}</div>`).join('')}</div>` : ''}
       <div class="section"><h4>Виды</h4>` +
@@ -2387,37 +2421,30 @@ const DB = (() => {
         break;
       }
       case 'amode': S.f.algs.mode = t.dataset.key; renderAlgs(); break;
-      case 'ignore': {
-        const name = t.dataset.name;
-        if (!isDev()) break;
-        if (ignored(name)) {
-          await safe(() => DB.setAlgFlag(name, false, null, S.me.login));
-          await DB.addEvent({ by: S.me.login, text: `снова считает ошибки алгоритма ${name}` });
-          await afterChange('Ошибки алгоритма снова учитываются');
-        } else {
-          modal('Пока не правим', `<div class="mono" style="margin-bottom:10px">${esc(name)}</div>
-            <div class="muted" style="margin-bottom:10px;font-size:13px">Ошибки этого алгоритма перестанут считаться: документы с только такими ошибками станут «Выполнен», в «JSON с ошибками» и выгрузку ошибок они не попадут. Отметку можно снять в любой момент.</div>
-            <textarea class="input" id="ignNote" style="width:100%;min-height:70px" placeholder="Почему не правим / что проверять вручную (необязательно)"></textarea>`,
-          `<button class="btn" data-act="closeModal">Отмена</button><button class="btn primary" data-act="ignoreSave" data-name="${esc(name)}">${I.mute} Пока не правим</button>`);
-          $('#ignNote').focus();
-        }
+      case 'asel': if (t.checked) S.algSel.add(t.dataset.name); else S.algSel.delete(t.dataset.name); renderAlgs(); break;
+      case 'aselAll': {
+        const rows = $$('#algs tbody tr[data-alg]').map(tr => tr.dataset.alg);
+        rows.forEach(n => t.checked ? S.algSel.add(n) : S.algSel.delete(n));
+        renderAlgs();
         break;
       }
-      case 'ignoreSave': {
-        const name = t.dataset.name;
-        const note = $('#ignNote').value.trim();
+      case 'aselClear': S.algSel.clear(); renderAlgs(); break;
+      case 'aflag': {
+        if (!isDev()) break;
+        const on = t.dataset.on === '1';
+        const names = [...S.algSel];
         t.disabled = true;
-        const ok = await safe(() => DB.setAlgFlag(name, true, note, S.me.login));
-        if (ok === undefined && !DB.demo) { /* ошибка уже показана */ }
-        closeModal();
-        await DB.addEvent({ by: S.me.login, text: `пока не правим ${name}${note ? ': ' + note : ''}` });
-        await afterChange('Отмечено: пока не правим');
+        const ok = await safe(() => DB.setAlgFlags(names, on, null, S.me.login));
+        if (ok === undefined && !DB.demo) { t.disabled = false; break; }
+        await DB.addEvent({ by: S.me.login, text: `${on ? 'отметил(а) «не трогать»' : 'снял(а) «не трогать»'}: ${names.length} алг.${names.length <= 3 ? ' — ' + names.join(', ') : ''}` });
+        S.algSel.clear();
+        await afterChange(on ? `«Не трогать»: ${names.length}` : `Отметка снята: ${names.length}`);
         break;
       }
       case 'deploy': {
         const note = ($('#deployNote') || {}).value || '';
         const n = new Set(S.pendingVers.map(v => v.name)).size;
-        if (!confirm(`Подтвердить, что ${n} ${plural(n, 'обновлённый алгоритм залит', 'обновлённых алгоритма залиты', 'обновлённых алгоритмов залиты')} на сервер ПКТС?\nПосле этого у всех откроется «JSON с ошибками» для перепрогона.`)) break;
+        if (!confirm(`Подтвердить, что ${n} ${plural(n, 'обновлённый алгоритм залит', 'обновлённых алгоритма залиты', 'обновлённых алгоритмов залиты')} на сервер ПКТС?\nПосле этого у всех откроются «JSON с ошибками» и «JSON с оптимизированными».`)) break;
         t.disabled = true;
         const id = await safe(() => DB.confirmDeploy(note));
         if (id !== undefined) await afterChange('Выкладка подтверждена — можно перепрогонять документы с ошибками');
@@ -2449,6 +2476,13 @@ const DB = (() => {
         const ed = errorDocs(t.dataset.login, st);
         if (!ed.ready.length) { toast('Пока нечего перепрогонять: алгоритмы с ошибками ещё не исправлены и не выложены', true); break; }
         await downloadBatch(t.dataset.login, st, ed.ready, 'перепрогон_ошибок');
+        break;
+      }
+      case 'dlPerf': {
+        const st = +t.dataset.st || 1;
+        const pd = perfDocs(t.dataset.login, st);
+        if (!pd.ready.length) { toast('Пока нечего перепроверять: оптимизированные алгоритмы ещё не выложены', true); break; }
+        await downloadBatch(t.dataset.login, st, pd.ready, 'оптимизированные');
         break;
       }
       case 'dlFull': { const st = +t.dataset.st || 1; await downloadBatch(t.dataset.login, st, docsOf(t.dataset.login, st), ''); break; }
