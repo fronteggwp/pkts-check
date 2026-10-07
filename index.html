@@ -463,6 +463,7 @@ const LogParser = (() => {
     loaderFail: /Не удалось выполнить алгоритм\s*"([^"]+)"\s*;?\s*(.*)$/,
     loadDone: /Время выполнения LoadDocumentAsync:\s*(\S+)/,
     algMsg: /^([A-Za-zА-Яа-яЁё0-9_]+(?:\.[A-Za-zА-Яа-яЁё0-9_]+)+):\s([\s\S]*)$/,
+    ver: /^(.+?):\s*\[PKTS-VER\s+([0-9.]+)\]/,   // метка версии алгоритма (первая строка Run)
     summary: /^Сводка:\s*(.*)$/,
   };
 
@@ -507,7 +508,7 @@ const LogParser = (() => {
       cur = null;
     }
     function newDoc(ts, implicit) {
-      const c = { doc: { guid: null, doctype: null, idx: 0, total: 0, startAt: ts, endAt: null, loadSec: null, finished: false, implicit, algs: [], errors: [], warnings: 0, running: [] }, algs: {}, open: {}, loadDone: false };
+      const c = { doc: { guid: null, doctype: null, idx: 0, total: 0, startAt: ts, endAt: null, loadSec: null, finished: false, implicit, algs: [], errors: [], warnings: 0, running: [], vers: {} }, algs: {}, open: {}, loadDone: false };
       res.docs.push(c.doc);
       return c;
     }
@@ -556,6 +557,10 @@ const LogParser = (() => {
       if (RX.operEnd.test(msg)) { close(true, ts); continue; }
       if ((mm = RX.summary.exec(msg))) { res.summary = mm[1]; continue; }
 
+      if (type !== 'Error' && (mm = RX.ver.exec(msg))) {   // [PKTS-VER] — какая версия алгоритма отработала в документе
+        if (cur) cur.doc.vers[mm[1].trim()] = mm[2];
+        continue;
+      }
       const relevant = RX.algStart.test(msg) || RX.algEnd.test(msg) || RX.algFail.test(msg) || type === 'Error' || RX.loadDone.test(msg);
       if (!cur) {
         if (!relevant || batchOp) continue;
@@ -638,21 +643,21 @@ const DB = (() => {
     kindCode: r.kind_code, match: r.match, candidates: r.candidates || [], errorCount: r.error_count || 0,
     warnings: r.warnings || 0, running: r.running || [], algs: r.algs, errors: r.errors,
     ps: r.ps || '', errAlgs: r.err_algs && r.err_algs.length ? r.err_algs : (r.error_count ? null : []), batchId: r.batch_id || null,
-    algNames: r.alg_names || [],
+    algNames: r.alg_names || [], algVers: r.alg_vers || {},
   });
   const runToRow = r => ({
     upload_id: r.uploadId, pos: r.pos, guid: r.guid, doctype: r.doctype, idx: r.idx, total: r.total, start_at: r.startAt,
     end_at: r.endAt, load_sec: r.loadSec, finished: r.finished, implicit: r.implicit, kind_code: r.kindCode, match: r.match,
     candidates: r.candidates || [], algs: r.algs || [], errors: r.errors || [], error_count: (r.errors || []).length,
     warnings: r.warnings || 0, running: r.running || [], ps: r.ps || '', err_algs: errAlgsOf(r.errors), batch_id: r.batchId || null,
-    alg_names: (r.algs || []).map(a => a.name),
+    alg_names: (r.algs || []).map(a => a.name), alg_vers: r.vers || {},
   });
   const uploadFromRow = r => ({
     id: r.id, fileName: r.file_name, by: r.by_login, at: r.at, size: r.size, operations: r.operations || [], batch: r.batch,
     summary: r.summary, logFrom: r.log_from, logTo: r.log_to, storagePath: r.storage_path,
   });
   const eventFromRow = r => ({ id: r.id, at: r.at, by: r.by_login, text: r.text, kind: r.kind, uploadId: r.upload_id });
-  const LIGHT = 'id,upload_id,pos,guid,doctype,idx,total,start_at,end_at,load_sec,finished,implicit,kind_code,match,error_count,warnings,running,ps,err_algs,batch_id,alg_names';
+  const LIGHT = 'id,upload_id,pos,guid,doctype,idx,total,start_at,end_at,load_sec,finished,implicit,kind_code,match,error_count,warnings,running,ps,err_algs,batch_id,alg_names,alg_vers';
   const versionFromRow = r => ({ id: r.id, name: r.name, version: r.version, note: r.note, at: r.created_at, by: r.created_by, deployId: r.deploy_id, commit: r.commit, kind: r.kind || 'fix' });
   const deployFromRow = r => ({ id: r.id, at: r.at, by: r.by_login, note: r.note, algCount: r.alg_count });
   const flagFromRow = r => ({ name: r.name, ignored: r.ignored, note: r.note, by: r.by_login, at: r.at });
@@ -856,7 +861,7 @@ const DB = (() => {
     async signOut() { this.st.me = null; this.save(); }
     async changePassword() { }
     async kinds() { return JSON.parse(JSON.stringify(this.st.kinds)); }
-    async runsLight() { return this.st.runs.map(r => ({ ...r, algs: undefined, errors: undefined, errAlgs: r.errAlgs || errAlgsOf(r.errors), algNames: r.algNames || (r.algs || []).map(a => a.name) })); }
+    async runsLight() { return this.st.runs.map(r => ({ ...r, algs: undefined, errors: undefined, errAlgs: r.errAlgs || errAlgsOf(r.errors), algNames: r.algNames || (r.algs || []).map(a => a.name), algVers: r.algVers || r.vers || {} })); }
     async uploads() { return this.st.uploads.slice().reverse(); }
     async runsFull(f) {
       return this.st.runs.filter(r => (!f.kindCode || r.kindCode === f.kindCode) && (!f.uploadId || r.uploadId === f.uploadId) && (!f.ids || f.ids.includes(r.id)));
@@ -888,7 +893,7 @@ const DB = (() => {
     async saveUpload(meta, runs) {
       const id = (this.st.uploads.reduce((m, u) => Math.max(m, u.id), 0)) + 1;
       this.st.uploads.push({ ...meta, id, at: new Date().toISOString() });
-      runs.forEach(r => this.st.runs.push({ ...r, id: this.st.nextId++, uploadId: id, errorCount: (r.errors || []).length, errAlgs: errAlgsOf(r.errors), algNames: (r.algs || []).map(a => a.name), ps: r.ps || '' }));
+      runs.forEach(r => this.st.runs.push({ ...r, id: this.st.nextId++, uploadId: id, errorCount: (r.errors || []).length, errAlgs: errAlgsOf(r.errors), algNames: (r.algs || []).map(a => a.name), algVers: r.vers || {}, ps: r.ps || '' }));
       this.save();
       return id;
     }
@@ -926,7 +931,7 @@ const DB = (() => {
   // состояние
   const S = {
     me: null, users: [], kinds: [], runs: [], uploadsList: [], avgDocSec: null, sig: '',
-    instances: [], flags: new Map(), versions: new Map(), pendingVers: [], deploys: [],
+    instances: [], flags: new Map(), versions: new Map(), pendingVers: [], deploys: [], observed: new Map(), deployById: new Map(),
     route: 'my', kindOpen: null, tab: 'overview', nav: [],
     f: {
       my: { q: '', status: 'all', type: 'all', stage: null },
@@ -1078,32 +1083,58 @@ const DB = (() => {
     return { eff: r.errAlgs.length, ign: r.errAlgs.filter(a => ignored(a)).length, algs: [...new Set(r.errAlgs.filter(Boolean))] };
   }
   const SLOW_SEC = 300;   // «медленный» — алгоритм дольше 5 минут
-  // исправлен ли алгоритм после прогона: deployed — новая версия уже на сервере (можно перепрогонять), pending — исправлен, ждёт выкладки
-  function algFix(name, runAt, onlyPerf) {
+  // ---- версии алгоритмов. Номер N в базе = метка «0.N» в алгоритме ([PKTS-VER 0.N] — первая строка Run в протоколе).
+  const verLabel = n => n == null ? '—' : `0.${n}`;
+  const verNum = label => { const m = /^\d+\.(\d+)$/.exec(String(label || '')); return m ? +m[1] : null; };
+  // на сервере: версия из последнего по времени прогона с меткой; откат — если раньше уже видели версию выше
+  const onServer = name => S.observed.get(name) || null;
+  // версия выложена: подтверждена кнопкой «Залил на сервер» или уже видна в протоколах
+  function isDeployed(v) {
+    if (v.deployId) return true;
+    const o = onServer(v.name);
+    return !!(o && o.last >= v.version);
+  }
+  // исправлен ли алгоритм после этого прогона: deployed — новая версия на сервере (перепрогонять), pending — исправлен, ждёт выкладки.
+  // Если в прогоне есть метка версии — сравниваются версии; нет метки (старый пакет) — по времени выкладки, как раньше.
+  function algFix(name, run, onlyPerf) {
     const vs = S.versions.get(name);
-    if (!vs) return null;
-    const t = ts(runAt);
+    if (!vs || !run) return null;
+    const rv = verNum(run.algVers && run.algVers[name]);
     let res = null;
     for (const v of vs) {
       if (onlyPerf && v.kind !== 'perf') continue;
-      if (!v.deployId) { res = res || 'pending'; continue; }
-      const d = S.deployById.get(v.deployId);
-      if (d && ts(d.at) > t) return 'deployed';
+      if (rv != null) {
+        if (v.version <= rv) continue;              // эта версия (или новее) уже отработала в прогоне
+        if (isDeployed(v)) return 'deployed';
+        res = res || 'pending';
+      } else {
+        if (!v.deployId && !isDeployed(v)) { res = res || 'pending'; continue; }
+        const d = v.deployId ? S.deployById.get(v.deployId) : null;
+        const t = d ? ts(d.at) : (onServer(v.name) || {}).firstAt || 0;
+        if (t > ts(run.startAt)) return 'deployed';
+      }
     }
     return res;
   }
-  function fixOf(algs, runAt, onlyPerf) {
+  function fixOf(algs, run, onlyPerf) {
     let res = null;
-    for (const a of algs) { const f = algFix(a, runAt, onlyPerf); if (f === 'deployed') return 'deployed'; if (f) res = f; }
+    for (const a of algs) { const f = algFix(a, run, onlyPerf); if (f === 'deployed') return 'deployed'; if (f) res = f; }
     return res;
   }
   function verInfo(name) {
-    const vs = S.versions.get(name);
-    if (!vs || !vs.length) return null;
-    const last = vs[vs.length - 1];
-    const pending = vs.some(v => !v.deployId);
-    const dep = !pending && S.deployById.get(last.deployId);
-    return { last, pending, deploy: dep || null, perf: vs.some(v => v.kind === 'perf'), notes: vs.map(v => `v${v.version}${v.kind === 'perf' ? ' (оптимизация)' : ''}${v.note ? ': ' + v.note : ''}`).join('\n') };
+    const vs = S.versions.get(name) || [];
+    const o = onServer(name);
+    if (!vs.length && !o) return null;
+    const last = vs[vs.length - 1] || null;
+    const available = last ? last.version : 1;
+    const pending = vs.some(v => !isDeployed(v));
+    const dep = last && last.deployId ? S.deployById.get(last.deployId) : null;
+    return {
+      last, available, pending, deploy: dep || null, observed: o, perf: vs.some(v => v.kind === 'perf'),
+      behind: !!(o && o.last < available),          // на сервере старее последней доступной
+      rollback: !!(o && o.max > o.last),            // раньше видели версию выше — откат или залит старый пакет
+      notes: vs.map(v => `${verLabel(v.version)}${v.kind === 'perf' ? ' (оптимизация)' : ''}${v.note ? ': ' + v.note : ''}`).join('\n'),
+    };
   }
 
   // =====================================================================================================================
@@ -1119,8 +1150,8 @@ const DB = (() => {
     if (fin) {
       const e = effErrors(fin);
       Object.assign(st, { errors: e.eff, ignored: e.ign, errAlgs: e.algs, status: e.eff ? 'errors' : 'ok', sec: docSec(fin) });
-      if (e.eff) st.fix = fixOf(e.algs, fin.startAt);
-      st.perf = fixOf(fin.algNames || [], fin.startAt, true);   // в документе выполнялись оптимизированные алгоритмы
+      if (e.eff) st.fix = fixOf(e.algs, fin);
+      st.perf = fixOf(fin.algNames || [], fin, true);   // в документе выполнялись оптимизированные алгоритмы
     } else if (last) {
       st.status = 'interrupted';
       st.running = last.running && last.running.length ? last.running.join(', ') : null;
@@ -1156,7 +1187,20 @@ const DB = (() => {
     S.deployById = new Map(meta.deploys.map(d => [d.id, d]));
     S.versions = new Map();
     meta.versions.slice().sort((a, b) => a.id - b.id).forEach(v => { if (!S.versions.has(v.name)) S.versions.set(v.name, []); S.versions.get(v.name).push(v); });
-    S.pendingVers = meta.versions.filter(v => !v.deployId);
+    // версии, замеченные в протоколах ([PKTS-VER]): последняя по времени прогона, максимальная и когда впервые видели каждую
+    S.observed = new Map();
+    for (const r of runs.slice().sort((a, b) => ts(a.startAt) - ts(b.startAt))) {
+      for (const [name, label] of Object.entries(r.algVers || {})) {
+        const n = verNum(label);
+        if (n == null) continue;
+        let o = S.observed.get(name);
+        if (!o) S.observed.set(name, o = { last: n, max: n, at: r.startAt, firstAt: 0, seen: {} });
+        o.last = n; o.at = r.startAt; o.max = Math.max(o.max, n);
+        if (!o.seen[n]) o.seen[n] = ts(r.startAt);
+      }
+    }
+    S.observed.forEach(o => { o.firstAt = o.seen[o.last] || 0; });
+    S.pendingVers = meta.versions.filter(v => !isDeployed(v));
     S.links = new Set(kinds.flatMap(k => k.linkAlgs || []).map(a => a.toLowerCase()));
 
     const cmp = (a, b) => ts(a.startAt) - ts(b.startAt) || a.uploadId - b.uploadId || a.id - b.id;
@@ -1834,15 +1878,21 @@ const DB = (() => {
     const pend = S.pendingVers;
     const last = S.deploys[0];
     const lastLine = last ? `Последняя выкладка: <b>${fmtDT(last.at, true)}</b> · ${esc(userName(last.by))} · ${last.algCount} ${plural(last.algCount, 'алгоритм', 'алгоритма', 'алгоритмов')}${last.note ? ' · ' + esc(last.note) : ''}` : 'Выкладок ещё не было.';
+    // откат: в последнем протоколе версия ниже, чем уже видели раньше (залит старый пакет или не все файлы)
+    const откаты = [...S.observed.entries()].filter(([, o]) => o.max > o.last);
+    const rollbackBox = откаты.length ? `<div class="card deploy-card" style="border-color:color-mix(in srgb,var(--err) 40%,var(--border));background:linear-gradient(135deg,var(--err-soft),var(--surface) 70%)">
+      <div class="txt"><b>⚠ На сервере версии ниже, чем уже были: ${откаты.length} ${plural(откаты.length, 'алгоритм', 'алгоритма', 'алгоритмов')}</b>
+        <div class="muted" style="margin-top:4px;font-size:13px">По меткам [PKTS-VER] в последних протоколах. Похоже, залит старый пакет или не все файлы — проверьте выкладку.</div>
+        <details><summary>Какие</summary><div class="vlist">${откаты.map(([n, o]) => `<div><span class="mono">${esc(n)}</span> — сейчас ${verLabel(o.last)} (${fmtDT(o.at)}), раньше было ${verLabel(o.max)}</div>`).join('')}</div></details></div></div>` : '';
     if (!pend.length) {
-      return `<div class="card deploy-card calm"><div class="txt"><span class="muted">${I.server}</span> Все исправленные алгоритмы уже на сервере. ${lastLine}
+      return rollbackBox + `<div class="card deploy-card calm"><div class="txt"><span class="muted">${I.server}</span> Все исправленные алгоритмы уже на сервере. ${lastLine}
         ${S.deploys.length ? ` · <a href="#" data-act="deployHistory">история (${S.deploys.length})</a>` : ''}</div></div>`;
     }
     const names = [...new Set(pend.map(v => v.name))];
-    return `<div class="card deploy-card">
-      <div class="txt"><b>${I.server} Обновлено ${names.length} ${plural(names.length, 'алгоритм', 'алгоритма', 'алгоритмов')} — ещё не залиты на сервер</b>
-        <div class="muted" style="margin-top:4px;font-size:13px">Залейте файлы на сервер ПКТС и нажмите кнопку — у всех откроются «JSON с ошибками» и «JSON с оптимизированными» для перепрогона документов, где работали эти алгоритмы.</div>
-        <details><summary>Что обновлено</summary><div class="vlist">${pend.map(v => `<div><span class="mono">${esc(v.name)}</span> <span class="faint">v${v.version}${v.at ? ' · ' + fmtDT(v.at) : ''}</span>${v.note ? ` — ${esc(v.note)}` : ''}</div>`).join('')}</div></details>
+    return rollbackBox + `<div class="card deploy-card">
+      <div class="txt"><b>${I.server} Обновлено ${names.length} ${plural(names.length, 'алгоритм', 'алгоритма', 'алгоритмов')} — на сервере их ещё нет</b>
+        <div class="muted" style="margin-top:4px;font-size:13px">Залейте пакет на сервер ПКТС и нажмите кнопку. Сайт и сам видит выкладку по меткам версий в протоколах ([PKTS-VER]): как только алгоритм отработает в новой версии — он считается выложенным. Кнопка нужна для алгоритмов, которые ещё не запускались.</div>
+        <details><summary>Что обновлено</summary><div class="vlist">${pend.map(v => { const o = onServer(v.name); return `<div><span class="mono">${esc(v.name)}</span> <span class="faint">${verLabel(v.version)}${v.at ? ' · ' + fmtDT(v.at) : ''} · на сервере ${o ? verLabel(o.last) : 'метки ещё нет'}</span>${v.note ? ` — ${esc(v.note)}` : ''}</div>`; }).join('')}</div></details>
         <div class="why">${lastLine}${S.deploys.length ? ` · <a href="#" data-act="deployHistory">история</a>` : ''}</div></div>
       <div class="act">${isDev()
         ? `<input class="input" id="deployNote" placeholder="Комментарий (необязательно)" style="width:220px"><button class="btn primary" data-act="deploy">${I.check}Залил на сервер</button>`
@@ -1877,7 +1927,7 @@ const DB = (() => {
 
   function algMode(a) {
     const v = verInfo(a.name);
-    return { ign: ignored(a.name), failed: a.failed > 0, slow: a.maxSec >= SLOW_SEC, pending: !!(v && v.pending), deployed: !!(v && !v.pending && v.last.version > 1), v };
+    return { ign: ignored(a.name), failed: a.failed > 0, slow: a.maxSec >= SLOW_SEC, pending: !!(v && v.pending), deployed: !!(v && !v.pending && v.last && v.last.version > 1), behind: !!(v && v.behind), rollback: !!(v && v.rollback), v };
   }
 
   function renderAlgs() {
@@ -1888,13 +1938,14 @@ const DB = (() => {
     const mode = S.f.algs.mode;
     const s = S.sort.algs;
     const withMode = S.algs.map(a => ({ a, m: algMode(a) }));
-    const counts = { all: withMode.length, failed: 0, slow: 0, ignored: 0, pending: 0, deployed: 0 };
-    withMode.forEach(({ m }) => { if (m.failed) counts.failed++; if (m.slow) counts.slow++; if (m.ign) counts.ignored++; if (m.pending) counts.pending++; if (m.deployed) counts.deployed++; });
+    const counts = { all: withMode.length, failed: 0, slow: 0, ignored: 0, pending: 0, deployed: 0, behind: 0 };
+    withMode.forEach(({ m }) => { if (m.failed) counts.failed++; if (m.slow) counts.slow++; if (m.ign) counts.ignored++; if (m.pending) counts.pending++; if (m.deployed) counts.deployed++; if (m.behind || m.rollback) counts.behind++; });
     const mb = (key, label, col) => `<button class="${mode === key ? 'on' : ''}" data-act="amode" data-key="${key}">${col ? `<span class="dot" style="background:${col}"></span>` : ''}${label}<span class="n">${counts[key]}</span></button>`;
     $('#algModes').innerHTML = mb('all', 'Все') + mb('failed', 'С ошибками', 'var(--err)') + mb('slow', 'Медленные (≥ 5 мин)', 'var(--int)')
-      + mb('ignored', 'Не трогать', 'var(--faint)') + mb('pending', 'Ждут выкладки', 'var(--int)') + mb('deployed', 'Исправлены', 'var(--rev)');
+      + mb('ignored', 'Не трогать', 'var(--faint)') + mb('pending', 'Ждут выкладки', 'var(--int)') + mb('deployed', 'Исправлены', 'var(--rev)')
+      + (counts.behind ? mb('behind', 'На сервере старая версия', 'var(--err)') : '');
     const list = withMode.filter(({ a, m }) => (!q || a.name.toLowerCase().includes(q))
-      && (mode === 'all' || (mode === 'failed' && m.failed) || (mode === 'slow' && m.slow) || (mode === 'ignored' && m.ign) || (mode === 'pending' && m.pending) || (mode === 'deployed' && m.deployed)))
+      && (mode === 'all' || (mode === 'failed' && m.failed) || (mode === 'slow' && m.slow) || (mode === 'ignored' && m.ign) || (mode === 'pending' && m.pending) || (mode === 'deployed' && m.deployed) || (mode === 'behind' && (m.behind || m.rollback))))
       .sort((x, y) => (x.a[s.key] < y.a[s.key] ? -1 : x.a[s.key] > y.a[s.key] ? 1 : 0) * s.dir);
     const max = Math.max(1, ...S.algs.map(a => a.maxSec));
     const tot = S.algs.reduce((x, a) => x + a.totalSec, 0);
@@ -1905,15 +1956,23 @@ const DB = (() => {
     const dev = isDev();
     const shown = list.slice(0, 800);
     const allSel = dev && shown.every(({ a }) => S.algSel.has(a.name));
-    const verCell = m => !m.v ? '<span class="faint">—</span>'
-      : m.v.pending ? `<span class="pill fixp small" title="${esc(m.v.notes)}">v${m.v.last.version} · ${m.v.last.kind === 'perf' ? 'оптимизация' : 'исправление'}, ждёт выкладки</span>`
-        : m.v.last.version > 1 ? `<span class="pill fixd small" title="${esc(m.v.notes)}">v${m.v.last.version} · ${m.v.last.kind === 'perf' ? 'оптимизирован' : 'исправлен'} ${m.v.deploy ? fmtDT(m.v.deploy.at) : ''}</span>` : '<span class="faint">v1</span>';
+    // «На сервере» — версия по последнему протоколу с меткой [PKTS-VER]; «Доступна» — последняя версия в st5
+    const serverCell = m => {
+      const o = m.v && m.v.observed;
+      if (!o) return '<span class="faint" title="в загруженных протоколах ещё нет метки версии">—</span>';
+      return `<span class="mono" title="по протоколу от ${fmtDT(o.at, true)}${o.max > o.last ? ' · раньше было ' + verLabel(o.max) : ''}">${verLabel(o.last)}</span>`
+        + (m.rollback ? ' <span class="pill errors small" title="раньше на сервере была версия выше">откат</span>' : '');
+    };
+    const availCell = m => !m.v ? '<span class="faint">0.1</span>'
+      : m.v.pending ? `<span class="pill fixp small" title="${esc(m.v.notes)}">${verLabel(m.v.available)} · ${m.v.last && m.v.last.kind === 'perf' ? 'оптимизация' : 'исправление'}, ждёт выкладки</span>`
+        : m.v.available > 1 ? `<span class="pill fixd small" title="${esc(m.v.notes)}">${verLabel(m.v.available)} · ${m.v.last && m.v.last.kind === 'perf' ? 'оптимизирован' : 'исправлен'}</span>`
+          : '<span class="faint">0.1</span>';
     const flagTitle = name => { const f = S.flags.get(name); return f ? esc(`Не трогать — ${userName(f.by)}, ${fmtDT(f.at)}${f.note ? ': ' + f.note : ''}`) : ''; };
     el.innerHTML = `<div class="card table-wrap"><table class="t"><thead><tr>
       ${dev ? `<th class="nosort" style="width:36px"><input type="checkbox" data-act="aselAll" ${allSel ? 'checked' : ''} title="Выбрать все показанные"></th>` : ''}
       ${th('name', 'Алгоритм')}${th('docs', 'Док.', 'num')}${th('lastSec', 'Последний', 'num')}${th('avgSec', 'Среднее', 'num')}
       ${th('maxSec', 'Максимум', 'num')}<th class="nosort" style="width:120px"></th>${th('totalSec', 'Всего', 'num')}${th('failed', 'С ошибкой', 'num')}
-      <th class="nosort">Версия</th></tr></thead>
+      <th class="nosort" title="версия по последнему протоколу (метка [PKTS-VER])">На сервере</th><th class="nosort" title="последняя версия в st5">Доступна</th></tr></thead>
       <tbody>${shown.map(({ a, m }) => `<tr data-alg="${esc(a.name)}" class="${S.algSel.has(a.name) ? 'sel' : ''}">
         ${dev ? `<td data-stop="1"><input type="checkbox" data-act="asel" data-name="${esc(a.name)}" ${S.algSel.has(a.name) ? 'checked' : ''}></td>` : ''}
         <td class="mono">${esc(a.name)}${S.links && S.links.has(a.name.toLowerCase()) ? ' <span class="faint">(связи)</span>' : ''}
@@ -1924,7 +1983,7 @@ const DB = (() => {
         <td><div class="alg-bar ${a.failed ? 'f' : ''}" style="width:${Math.max(1, (a.maxSec / max) * 100)}%"></div></td>
         <td class="num">${fmtSec(a.totalSec)}</td>
         <td class="num">${a.failed ? `<span class="errn">${a.failed}</span>` : '<span class="faint">0</span>'}</td>
-        <td class="nowrap">${verCell(m)}</td></tr>`).join('')}</tbody></table></div>
+        <td class="nowrap">${serverCell(m)}</td><td class="nowrap">${availCell(m)}</td></tr>`).join('')}</tbody></table></div>
       ${dev && S.algSel.size ? `<div class="bulkbar">Выбрано: <b>${S.algSel.size}</b>
         <button class="btn primary small" data-act="aflag" data-on="1">${I.mute} Не трогать</button>
         <button class="btn small" data-act="aflag" data-on="0">Снять «не трогать»</button>
@@ -1955,10 +2014,12 @@ const DB = (() => {
   }
 
   // ошибка с пометками: «не трогать», исправлено и выложено / ждёт выкладки
-  function errBox(e, runAt) {
+  function errBox(e, run) {
     const ign = ignored(e.alg);
-    const fx = e.alg && !ign ? algFix(e.alg, runAt) : null;
-    const tags = (ign ? '<span class="pill ign small">не трогать</span>' : '')
+    const fx = e.alg && !ign ? algFix(e.alg, run) : null;
+    const rv = e.alg && run && run.algVers ? run.algVers[e.alg] : null;
+    const tags = (rv ? `<span class="pill plain small" title="версия алгоритма в этом прогоне (метка [PKTS-VER])">версия ${esc(rv)}</span>` : '')
+      + (ign ? '<span class="pill ign small">не трогать</span>' : '')
       + (fx === 'deployed' ? '<span class="pill fixd small">исправлено — перепрогнать</span>' : fx === 'pending' ? '<span class="pill fixp small">исправлено, ждёт выкладки</span>' : '');
     return `<div class="errbox ${ign ? 'ign' : ''}"><div class="a">${esc(e.alg || 'Документ')}${tags ? `<span class="tags">${tags}</span>` : ''}</div><div style="margin-top:3px">${esc(e.message)}</div>
       ${e.details ? `<details><summary>Подробности и стек</summary><pre>${esc(e.details)}</pre></details>` : ''}</div>`;
@@ -2030,7 +2091,7 @@ const DB = (() => {
             <div class="mg"><div class="l">Алгоритмов отработало</div><div class="v">${algs.filter(x => x.ran).length} из ${own.length}${notRan && lastFin ? ` <span class="faint" style="font-weight:500">(не запускались ${notRan})</span>` : ''}</div></div>
           </div>
           ${!lastFin && last.running && last.running.length ? `<div class="errbox warn" style="margin-top:12px"><div class="a" style="color:var(--int);font-family:var(--font)">Протокол оборвался во время выполнения:</div><div class="mono" style="margin-top:4px">${last.running.map(esc).join('<br>')}</div></div>` : ''}
-          ${errs1.length ? `<div class="section"><h4>Ошибки</h4>${errs1.slice(0, 3).map(e => errBox(e, (lastFin || last).startAt)).join('')}${errs1.length > 3 || errDocs.length > 1 ? `<button class="btn small" data-act="tab" data-tab="errors">Все ошибки (${errTotal})</button>` : ''}</div>` : ''}`
+          ${errs1.length ? `<div class="section"><h4>Ошибки</h4>${errs1.slice(0, 3).map(e => errBox(e, lastFin || last)).join('')}${errs1.length > 3 || errDocs.length > 1 ? `<button class="btn small" data-act="tab" data-tab="errors">Все ошибки (${errTotal})</button>` : ''}</div>` : ''}`
         : `<div class="empty" style="padding:24px"><div class="ico">⏳</div>Протоколов по этому виду ещё не загружали</div>`}
         </div>
         <div class="section"><h4>Протокол одиночного запуска</h4>
@@ -2054,13 +2115,18 @@ const DB = (() => {
           <td class="num">${d.st.errors ? `<span class="errn">${d.st.errors}</span>` : d.st.fin ? '0' : '—'}${d.st.ignored ? ` <span class="faint" title="из них в алгоритмах «не трогать»">(${d.st.ignored} не тр.)</span>` : ''}</td></tr>`).join('')}</tbody></table></div>`
         : '<div class="empty"><div class="ico">📄</div>Нет документов</div>';
     } else if (tab === 'errors') {
-      body = errDocs.length ? errDocs.map(d => { const r = finOf(d); return `<div class="doc-h">${docLabel(d)} <span class="faint">${fmtDT(r.startAt, true)}</span></div>${(r.errors || []).map(e => errBox(e, r.startAt)).join('')}`; }).join('')
+      body = errDocs.length ? errDocs.map(d => { const r = finOf(d); return `<div class="doc-h">${docLabel(d)} <span class="faint">${fmtDT(r.startAt, true)}</span></div>${(r.errors || []).map(e => errBox(e, r)).join('')}`; }).join('')
         : '<div class="empty"><div class="ico">✅</div>Ошибок в последних прогонах нет</div>';
     } else if (tab === 'algs') {
       body = `${algRun && algRun !== lastFin ? '<div class="faint" style="margin-bottom:8px;font-size:12.5px">по документу этапа 2</div>' : ''}<div class="table-wrap"><table class="t"><thead><tr><th class="nosort">Алгоритм</th><th class="nosort num">Запусков</th><th class="nosort num">Время</th><th class="nosort" style="width:130px"></th><th class="nosort num">Макс.</th></tr></thead>
         <tbody>${algs.map(a => { const vi = verInfo(a.name); return `<tr style="cursor:default">
           <td class="mono">${a.failed ? (ignored(a.name) ? '<span class="faint" title="ошибка (не трогать)">✗</span>' : '<span style="color:var(--err)" title="ошибка">✗</span>') : a.ran ? '<span style="color:var(--ok)">✓</span>' : '<span class="faint" title="не запускался">·</span>'} ${esc(a.name)}${LogParser.isLink(S.links, a.name) ? ' <span class="faint">(связи)</span>' : a.inKind ? '' : ' <span class="faint">(общий)</span>'}
-            ${a.ran && a.maxSec >= SLOW_SEC ? ' <span class="pill fixp small">медленный</span>' : ''}${ignored(a.name) ? ' <span class="pill ign small">не трогать</span>' : ''}${vi && vi.last.version > 1 || vi && vi.pending ? ` <span class="pill ${vi.pending ? 'fixp' : 'fixd'} small" title="${esc(vi.notes)}">v${vi.last.version}</span>` : ''}</td>
+            ${a.ran && a.maxSec >= SLOW_SEC ? ' <span class="pill fixp small">медленный</span>' : ''}${ignored(a.name) ? ' <span class="pill ign small">не трогать</span>' : ''}${(() => {
+              const rv = algRun && algRun.algVers ? algRun.algVers[a.name] : null;   // версия в этом прогоне (метка [PKTS-VER])
+              const newer = vi && (verNum(rv) == null ? vi.available > 1 : vi.available > verNum(rv));
+              return (rv ? ` <span class="pill plain small" title="версия в этом прогоне">${esc(rv)}</span>` : '')
+                + (newer ? ` <span class="pill ${vi.pending ? 'fixp' : 'fixd'} small" title="${esc(vi.notes)}">доступна ${verLabel(vi.available)}${vi.pending ? ', ждёт выкладки' : ''}</span>` : '');
+            })()}</td>
           <td class="num">${a.ran ? a.count : '—'}</td><td class="num">${a.ran ? fmtSec(a.totalSec) : '—'}</td>
           <td>${a.ran ? `<div class="alg-bar ${a.failed && !ignored(a.name) ? 'f' : ''}" style="width:${Math.max(2, (a.totalSec / maxAlg) * 100)}%"></div>` : ''}</td>
           <td class="num">${a.ran ? fmtSec(a.maxSec) : '—'}</td></tr>`; }).join('')}</tbody></table></div>`;
@@ -2343,7 +2409,7 @@ const DB = (() => {
       ${m.ign ? `<div class="errbox ign" style="margin-bottom:12px"><b>Не трогать</b> — отметка для разработчика: в выгрузку ошибок и медленных не попадает${S.flags.get(a.name).note ? ' · ' + esc(S.flags.get(a.name).note) : ''} <span class="faint">(${esc(userName(S.flags.get(a.name).by))}, ${fmtDT(S.flags.get(a.name).at)})</span></div>` : ''}
       ${m.slow ? `<div class="errbox warn" style="margin-bottom:12px"><b>Медленный</b> — максимум ${fmtSec(a.maxSec)}, последний прогон ${a.lastSec >= 0 ? fmtSec(a.lastSec) : '—'}: кандидат на оптимизацию</div>` : ''}
       ${vi ? `<div class="section" style="margin-top:0"><h4>Версии</h4>${(S.versions.get(a.name) || []).slice().reverse().map(v => `<div style="padding:6px 0;border-bottom:1px dashed var(--border);font-size:13px">
-          <b>v${v.version}</b> · ${fmtDT(v.at, true)}${v.deployId ? ` · <span style="color:var(--rev)">выложено ${fmtDT((S.deployById.get(v.deployId) || {}).at, true)}</span>` : ' · <span style="color:var(--int)">ждёт выкладки</span>'}${v.note ? ` — ${esc(v.note)}` : ''}${v.commit ? ` <span class="faint mono">${esc(v.commit.slice(0, 8))}</span>` : ''}</div>`).join('')}</div>` : ''}
+          <b>${verLabel(v.version)}</b> · ${fmtDT(v.at, true)}${v.deployId ? ` · <span style="color:var(--rev)">выложено ${fmtDT((S.deployById.get(v.deployId) || {}).at, true)}</span>` : isDeployed(v) ? ' · <span style="color:var(--rev)">на сервере (по протоколу)</span>' : ' · <span style="color:var(--int)">ждёт выкладки</span>'}${v.note ? ` — ${esc(v.note)}` : ''}${v.commit ? ` <span class="faint mono">${esc(v.commit.slice(0, 8))}</span>` : ''}</div>`).join('')}</div>` : ''}
       <div class="section"><h4>Виды</h4>` +
       a.kinds.map(c => { const k = kindByCode(c); return `<div style="display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)"><div><a href="#/algs/k/${encodeURIComponent(c)}" class="mono">${esc(c)}</a> <span class="muted">${esc(k ? k.name : '')}</span></div>${k ? pill(k.status) : ''}</div>`; }).join('') + '</div>',
       '<button class="btn" data-act="closeModal">Закрыть</button>');
