@@ -654,8 +654,18 @@ const DB = (() => {
   });
   const uploadFromRow = r => ({
     id: r.id, fileName: r.file_name, by: r.by_login, at: r.at, size: r.size, operations: r.operations || [], batch: r.batch,
-    summary: r.summary, logFrom: r.log_from, logTo: r.log_to, storagePath: r.storage_path,
+    summary: r.summary, logFrom: r.log_from, logTo: r.log_to, storagePath: r.storage_path, hasRaw: !!r.has_raw,
   });
+  const UPLOAD_COLS = 'id,file_name,by_login,at,size,operations,batch,summary,log_from,log_to,storage_path,has_raw';
+  // gzip + base64 текста протокола (копия в базе для разработчика)
+  async function gzipB64(text) {
+    if (typeof CompressionStream === 'undefined') return null;
+    const stream = new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'));
+    const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(bin);
+  }
   const eventFromRow = r => ({ id: r.id, at: r.at, by: r.by_login, text: r.text, kind: r.kind, uploadId: r.upload_id });
   const LIGHT = 'id,upload_id,pos,guid,doctype,idx,total,start_at,end_at,load_sec,finished,implicit,kind_code,match,error_count,warnings,running,ps,err_algs,batch_id,alg_names,alg_vers';
   const versionFromRow = r => ({ id: r.id, name: r.name, version: r.version, note: r.note, at: r.created_at, by: r.created_by, deployId: r.deploy_id, commit: r.commit, kind: r.kind || 'fix' });
@@ -729,7 +739,8 @@ const DB = (() => {
       return out;
     }
     async uploads() {
-      return chk(await this.sb.from('uploads').select('*').order('id', { ascending: false })).map(uploadFromRow);
+      // без raw_gz: копия текста протокола большая и нужна только разработчику (через SQL)
+      return chk(await this.sb.from('uploads').select(UPLOAD_COLS).order('id', { ascending: false })).map(uploadFromRow);
     }
     async page(build) {
       const out = [];
@@ -802,7 +813,22 @@ const DB = (() => {
         const { error } = await this.sb.storage.from('protocols').upload(path, new Blob([rawText], { type: 'text/plain;charset=utf-8' }));
         if (!error) await this.sb.from('uploads').update({ storage_path: path }).eq('id', id);
       } catch { }
+      try { const gz = await gzipB64(rawText); if (gz) await this.sb.rpc('set_upload_raw', { p_id: id, p_raw: gz }); } catch { }
       return id;
+    }
+    // протоколы, загруженные до появления копии в базе: скачать из хранилища и дописать (тихо, по несколько за раз)
+    async backfillRaw(limit) {
+      const rows = chk(await this.sb.from('uploads').select('id,storage_path').eq('has_raw', false).not('storage_path', 'is', null).order('id').limit(limit || 5));
+      let done = 0;
+      for (const r of rows) {
+        try {
+          const { data, error } = await this.sb.storage.from('protocols').download(r.storage_path);
+          if (error || !data) continue;
+          const gz = await gzipB64(await data.text());
+          if (gz && !(await this.sb.rpc('set_upload_raw', { p_id: r.id, p_raw: gz })).error) done++;
+        } catch { }
+      }
+      return done;
     }
     async deleteUpload(u) {
       if (u.storagePath) { try { await this.sb.storage.from('protocols').remove([u.storagePath]); } catch { } }
@@ -903,6 +929,7 @@ const DB = (() => {
       this.save();
     }
     async rawUrl() { return null; }
+    async backfillRaw() { return 0; }
     async updateRun(id, p) { const r = this.st.runs.find(x => x.id === id); if (r) { r.kindCode = p.kindCode; r.match = p.match; } this.save(); }
     async setReview(code, rv, stage) {
       const k = this.st.kinds.find(x => x.code === code);
@@ -1410,6 +1437,8 @@ const DB = (() => {
     try { await loadState(); } catch (e) { renderLogin('Не удалось загрузить данные: ' + e.message); return; }
     $('#app').innerHTML = '';
     route();
+    // фоном: копии старых протоколов в базу (для разбора ошибок разработчиком), по 5 за раз
+    setTimeout(async () => { try { while (await DB.backfillRaw(5) > 0) { } } catch { } }, 4000);
   }
 
   function route() {
