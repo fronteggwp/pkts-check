@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Перепроверка ПКТС 2.0</title>
+<title>Перепроверка ПиКТС 2.0</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%233559e0'/%3E%3Cpath d='M9 16.5l4.5 4.5L23 11.5' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -451,7 +451,7 @@ body.observer [data-act="dlRemaining"], body.observer [data-act="dlRemainingErr"
 <div id="app"></div>
 <div id="toasts" class="toasts" aria-live="polite"></div>
 <script>
-// Разбор протокола ПКТС 2.0 в браузере.
+// Разбор протокола ПиКТС 2.0 в браузере.
 // Пакет («Пакетное выполнение алгоритмов актуализации»): документ начинается строкой «=== Passport (guid), N/M ===»;
 // документ выполнен, если пришло «Время выполнения LoadDocumentAsync», начался следующий документ или «Операция завершена».
 // Документ, на котором протокол оборвался (сервер упал) или началась новая операция, — прерван.
@@ -1401,7 +1401,7 @@ const DB = (() => {
         <div class="card login">
           <div class="side">
             <div class="brand"><span class="logo" style="background:rgba(255,255,255,.18);box-shadow:none">${I.logo}</span></div>
-            <h1>Перепроверка<br>ПКТС 2.0</h1>
+            <h1>Перепроверка<br>ПиКТС 2.0</h1>
             <p>Общая доска команды: какие виды уже прогнаны, что упало, что осталось.</p>
             <ul>
               <li><span>1</span>Скачиваете JSON со своими документами и запускаете пакет</li>
@@ -1495,7 +1495,7 @@ const DB = (() => {
     shell.innerHTML = `
       ${DB.demo ? '<div class="demo-bar">Демо-режим: данные хранятся только в этом браузере. Для работы команды подключите Supabase — см. README.</div>' : ''}
       <header class="topbar"><div class="topbar-in">
-        <a class="brand" href="#/${isObserver() ? 'all' : 'my'}" style="color:inherit;text-decoration:none"><span class="logo">${I.logo}</span><div>Перепроверка ПКТС 2.0<small>${S.kinds.length} видов · ${S.team.length} человек · время МСК</small></div></a>
+        <a class="brand" href="#/${isObserver() ? 'all' : 'my'}" style="color:inherit;text-decoration:none"><span class="logo">${I.logo}</span><div>Перепроверка ПиКТС 2.0<small>${S.kinds.length} видов · ${S.team.length} человек · время МСК</small></div></a>
         <nav class="nav">
           ${isObserver() ? '' : tab('my', 'Мои виды', ms.remaining)}
           ${tab('all', 'Все виды')}
@@ -1625,7 +1625,7 @@ const DB = (() => {
         <div class="why">${why}${pdWhy ? '<br>' + pdWhy : ''}</div>
       </div>
       <div class="card step">
-        <div class="t"><span class="n">2</span>Запустите в ПКТС 2.0</div>
+        <div class="t"><span class="n">2</span>Запустите в ПиКТС 2.0</div>
         <div class="d">«Пакетное выполнение алгоритмов актуализации» → загрузите скачанный файл. Набор параметров уже указан в JSON${stage === 2 ? ' (для аналитических — свой набор у каждого документа)' : ''}:</div>
         <div class="copybox"><span style="flex:1">"paramValueSetCode": "${stage === 2 ? 'BatchRun / код набора' : 'BatchRun'}"</span></div>
         <div class="d" style="flex:0">Когда пакет закончится (или сервер упадёт) — сохраните протокол в .txt.</div>
@@ -1947,7 +1947,7 @@ const DB = (() => {
     const names = [...new Set(pend.map(v => v.name))];
     return rollbackBox + `<div class="card deploy-card">
       <div class="txt"><b>${I.server} Обновлено ${names.length} ${plural(names.length, 'алгоритм', 'алгоритма', 'алгоритмов')} — на сервере их ещё нет</b>
-        <div class="muted" style="margin-top:4px;font-size:13px">Залейте пакет на сервер ПКТС и нажмите кнопку. Сайт и сам видит выкладку по меткам версий в протоколах ([PKTS-VER]): как только алгоритм отработает в новой версии — он считается выложенным. Кнопка нужна для алгоритмов, которые ещё не запускались.</div>
+        <div class="muted" style="margin-top:4px;font-size:13px">Залейте пакет на сервер ПиКТС и нажмите кнопку. Сайт и сам видит выкладку по меткам версий в протоколах ([PKTS-VER]): как только алгоритм отработает в новой версии — он считается выложенным. Кнопка нужна для алгоритмов, которые ещё не запускались.</div>
         <details><summary>Что обновлено</summary><div class="vlist">${pend.map(v => { const o = onServer(v.name); return `<div><span class="mono">${esc(v.name)}</span> <span class="faint">${verLabel(v.version)}${v.at ? ' · ' + fmtDT(v.at) : ''} · на сервере ${o ? verLabel(o.last) : 'метки ещё нет'}</span>${v.note ? ` — ${esc(v.note)}` : ''}</div>`; }).join('')}</div></details>
         <div class="why">${lastLine}${S.deploys.length ? ` · <a href="#" data-act="deployHistory">история</a>` : ''}</div></div>
       <div class="act">${isDev()
@@ -2569,7 +2569,7 @@ const DB = (() => {
       case 'deploy': {
         const note = ($('#deployNote') || {}).value || '';
         const n = new Set(S.pendingVers.map(v => v.name)).size;
-        if (!confirm(`Подтвердить, что ${n} ${plural(n, 'обновлённый алгоритм залит', 'обновлённых алгоритма залиты', 'обновлённых алгоритмов залиты')} на сервер ПКТС?\nПосле этого у всех откроются «JSON с ошибками» и «JSON с оптимизированными».`)) break;
+        if (!confirm(`Подтвердить, что ${n} ${plural(n, 'обновлённый алгоритм залит', 'обновлённых алгоритма залиты', 'обновлённых алгоритмов залиты')} на сервер ПиКТС?\nПосле этого у всех откроются «JSON с ошибками» и «JSON с оптимизированными».`)) break;
         t.disabled = true;
         const id = await safe(() => DB.confirmDeploy(note));
         if (id !== undefined) await afterChange('Выкладка подтверждена — можно перепрогонять документы с ошибками');
