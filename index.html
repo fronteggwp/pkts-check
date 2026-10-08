@@ -1322,6 +1322,8 @@ const DB = (() => {
       : mine.filter(k => k.guid).map(k => ({ kind: k.code, doctype: k.doctype, guid: k.guid, ps: '', st: k.s1 }));
   }
   const remainingDocs = (login, stage) => docsOf(login, stage).filter(d => d.st.status === 'pending' || d.st.status === 'interrupted');
+  // остаток + документы, где были ошибки (все, независимо от исправления/выкладки)
+  const remainingErrDocs = (login, stage) => docsOf(login, stage).filter(d => d.st.status === 'pending' || d.st.status === 'interrupted' || d.st.status === 'errors');
   // документы, где выполнялись оптимизированные алгоритмы: перепроверить после выкладки
   function perfDocs(login, stage) {
     const e = docsOf(login, stage).filter(d => d.st.perf);
@@ -1578,6 +1580,7 @@ const DB = (() => {
     const mine = login === S.me.login;
     const ed = errorDocs(login, stage);
     const pd = perfDocs(login, stage);
+    const nRE = n + ed.all.length;
     const pdWhy = pd.ready.length ? `Оптимизировано и выложено — перепроверить: <b style="color:var(--text)">${pd.ready.length}</b> ${plural(pd.ready.length, 'документ', 'документа', 'документов')}.`
       : pd.waiting.length ? `Оптимизация в ${pd.waiting.length} ${plural(pd.waiting.length, 'документе', 'документах', 'документах')} ждёт выкладки на сервер — потом откроется «JSON с оптимизированными».` : '';
     const why = !ed.all.length ? 'Документов с ошибками нет.'
@@ -1590,6 +1593,7 @@ const DB = (() => {
         <div class="d">${n ? `JSON только с тем, что ещё не выполнилось — <b style="color:var(--text)">${n} ${plural(n, 'документ', 'документа', 'документов')}</b>. После падения сервера просто скачайте его заново.` : 'Все документы выполнены — запускать нечего.'}</div>
         <div class="acts">
           <button class="btn primary" data-act="dlRemaining" data-login="${esc(login)}" data-st="${stage}" ${n ? '' : 'disabled'}>${I.dl}JSON остатка</button>
+          <button class="btn" data-act="dlRemainingErr" data-login="${esc(login)}" data-st="${stage}" ${nRE ? '' : 'disabled'} title="Невыполненные и прерванные документы плюс все документы, в которых были ошибки">${I.dl}остаток + ошибочные${nRE ? ` (${nRE})` : ''}</button>
           <button class="btn" data-act="dlErrors" data-login="${esc(login)}" data-st="${stage}" ${ed.ready.length ? '' : 'disabled'} title="Перепрогон документов, у которых алгоритмы с ошибками исправлены и выложены на сервер">${I.rerun}JSON с ошибками${ed.ready.length ? ` (${ed.ready.length})` : ''}</button>
           <button class="btn" data-act="dlPerf" data-login="${esc(login)}" data-st="${stage}" ${pd.ready.length ? '' : 'disabled'} title="Перепроверка документов, где выполнялись оптимизированные и уже выложенные алгоритмы">${I.rerun}JSON с оптимизированными${pd.ready.length ? ` (${pd.ready.length})` : ''}</button>
           <button class="btn small ghost" data-act="dlFull" data-login="${esc(login)}" data-st="${stage}" title="Все назначенные документы этапа">полный JSON</button>
@@ -2357,6 +2361,7 @@ const DB = (() => {
       </div>`).join('')}`,
       `<button class="btn" data-act="closeModal">Закрыть</button>
        ${mine.toReview ? `<button class="btn" data-act="startReview">${I.check}Проверять результаты (${mine.toReview})</button>` : ''}
+       ${(() => { const nRE = remainingErrDocs(S.me.login, st).length; return `<button class="btn" data-act="dlRemainingErr" data-login="${esc(S.me.login)}" data-st="${st}" ${nRE ? '' : 'disabled'} title="Невыполненные и прерванные плюс все документы с ошибками">${I.dl}остаток + ошибочные (${nRE})</button>`; })()}
        <button class="btn primary" data-act="dlRemaining" data-login="${esc(S.me.login)}" data-st="${st}" ${mine.remaining ? '' : 'disabled'}>${I.dl}JSON остатка (${mine.remaining})</button>`);
   }
 
@@ -2564,6 +2569,13 @@ const DB = (() => {
         const docs = remainingDocs(t.dataset.login, st);
         if (!docs.length) { toast('Нечего запускать — всё выполнено'); break; }
         await downloadBatch(t.dataset.login, st, docs, 'остаток');
+        break;
+      }
+      case 'dlRemainingErr': {
+        const st = +t.dataset.st || 1;
+        const docs = remainingErrDocs(t.dataset.login, st);
+        if (!docs.length) { toast('Нечего запускать — всё выполнено без ошибок'); break; }
+        await downloadBatch(t.dataset.login, st, docs, 'остаток_и_ошибочные');
         break;
       }
       case 'dlErrors': {
