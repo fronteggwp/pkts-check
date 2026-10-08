@@ -436,6 +436,15 @@ table.t td.num, table.t th.num { text-align: right; font-variant-numeric: tabula
   .busy { min-width: 0; width: calc(100vw - 24px); }
 }
 
+/* наблюдатель: только просмотр — кнопки действий и загрузка протоколов скрыты (в базе записи тоже запрещены) */
+body.observer .drop,
+body.observer [data-act="pickFiles"], body.observer [data-act="startReview"], body.observer [data-act="review"],
+body.observer [data-act="reassign"], body.observer [data-act="bulkAssign"], body.observer [data-act="bulkClear"],
+body.observer [data-act="delUpload"], body.observer [data-act="deploy"], body.observer [data-act="aflag"],
+body.observer [data-act="attribute"], body.observer [data-act="unattribute"], body.observer [data-act="autoNext"],
+body.observer [data-act="dlErrors"], body.observer [data-act="dlFull"], body.observer [data-act="dlPerf"],
+body.observer [data-act="dlRemaining"], body.observer [data-act="dlRemainingErr"] { display: none !important; }
+
 </style>
 </head>
 <body>
@@ -1036,10 +1045,15 @@ const DB = (() => {
   const who = login => login ? `<span class="who">${avatar(login)}${esc(userName(login))}</span>` : '<span class="faint">не назначен</span>';
   const pill = s => `<span class="pill ${s}"><i></i>${STATUS[s].label}</span>`;
   const typeRu = (t, cat) => cat === 'analytic' ? 'Аналитический' : t === 'Passport' ? 'Паспорт' : 'Сводный';
-  const roleRu = r => r === 'tester' ? 'тестировщик' : 'разработчик';
+  const roleRu = r => r === 'tester' ? 'тестировщик' : r === 'observer' ? 'наблюдатель' : 'разработчик';
   const docSec = r => r.loadSec ?? (r.endAt ? (ts(r.endAt) - ts(r.startAt)) / 1000 : null);
   const firstName = n => (n || '').split(' ')[0];
   const isDev = () => !!S.me && (S.me.role === 'dev' || S.me.isAdmin);
+  // наблюдатель: только смотрит (в базе — без прав на запись), в команде и назначениях не участвует
+  const isObserver = () => !!S.me && S.me.role === 'observer';
+  const teamOf = users => users.filter(u => u.role !== 'observer');
+  const WRITE_ACTS = new Set(['aflag', 'attribute', 'unattribute', 'bulkAssign', 'bulkClear', 'delUpload', 'deploy', 'pickFiles', 'review', 'reassign',
+    'startReview', 'autoNext', 'dlErrors', 'dlFull', 'dlPerf', 'dlRemaining', 'dlRemainingErr']);
   const shortGuid = g => g ? g.slice(0, 8) + '…' : '';
   const psLabel = ps => ps ? `набор ${ps}` : 'BatchRun';
 
@@ -1208,6 +1222,7 @@ const DB = (() => {
   async function loadState() {
     const [users, kinds, runs, uploads, instances, meta] = await Promise.all([DB.users(), DB.kinds(), DB.runsLight(), DB.uploads(), DB.instances(), DB.algMeta()]);
     S.users = users;
+    S.team = teamOf(users);
     S.uploadsList = uploads;
     S.runs = runs;
     S.instances = instances;
@@ -1378,6 +1393,7 @@ const DB = (() => {
     let users = [];
     try { users = await DB.users(); } catch (e) { msg = e.message; }
     S.users = users;
+    S.team = teamOf(users);
     let sel = pref('lastLogin', null);
     if (!users.some(u => u.login === sel)) sel = null;
     $('#app').innerHTML = `
@@ -1451,6 +1467,7 @@ const DB = (() => {
   function route() {
     const parts = location.hash.replace(/^#\/?/, '').split('/');
     S.route = ['my', 'all', 'team', 'uploads', 'algs'].includes(parts[0]) ? parts[0] : 'my';
+    if (S.route === 'my' && isObserver()) S.route = 'all';
     const kind = parts[1] === 'k' && parts[2] ? decodeURIComponent(parts[2]) : null;
     const pageChanged = !$('#page') || $('#page').dataset.route !== S.route;
     S.kindOpen = kind;
@@ -1465,6 +1482,7 @@ const DB = (() => {
   // каркас
   function renderShell() {
     if (!S.me) return;
+    document.body.classList.toggle('observer', isObserver());
     const st = pageStage('my');
     const ms = stats(viewKinds(st).filter(k => k.assignee === S.me.login), st);
     const dark = document.documentElement.dataset.theme === 'dark';
@@ -1477,9 +1495,9 @@ const DB = (() => {
     shell.innerHTML = `
       ${DB.demo ? '<div class="demo-bar">Демо-режим: данные хранятся только в этом браузере. Для работы команды подключите Supabase — см. README.</div>' : ''}
       <header class="topbar"><div class="topbar-in">
-        <a class="brand" href="#/my" style="color:inherit;text-decoration:none"><span class="logo">${I.logo}</span><div>Перепроверка ПКТС 2.0<small>${S.kinds.length} видов · ${S.users.length} человек · время МСК</small></div></a>
+        <a class="brand" href="#/${isObserver() ? 'all' : 'my'}" style="color:inherit;text-decoration:none"><span class="logo">${I.logo}</span><div>Перепроверка ПКТС 2.0<small>${S.kinds.length} видов · ${S.team.length} человек · время МСК</small></div></a>
         <nav class="nav">
-          ${tab('my', 'Мои виды', ms.remaining)}
+          ${isObserver() ? '' : tab('my', 'Мои виды', ms.remaining)}
           ${tab('all', 'Все виды')}
           ${tab('team', 'Команда')}
           ${tab('uploads', 'Протоколы', S.uploadsList.length)}
@@ -1661,7 +1679,7 @@ const DB = (() => {
       </select>
       ${page === 'all' ? `<select class="input" data-act="who" data-page="all">
         <option value="all">Все исполнители</option>
-        ${S.users.map(u => `<option value="${esc(u.login)}" ${f.who === u.login ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}
+        ${S.team.map(u => `<option value="${esc(u.login)}" ${f.who === u.login ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}
         <option value="none" ${f.who === 'none' ? 'selected' : ''}>Без исполнителя</option>
       </select>` : ''}
     </div>
@@ -1736,7 +1754,7 @@ const DB = (() => {
     </table></div>
     ${bulk && S.selected.size ? `<div class="bulkbar">Выбрано: <b>${S.selected.size}</b>
       <span style="margin-left:8px">Назначить:</span>
-      <select class="input" id="bulkTo">${S.users.map(u => `<option value="${esc(u.login)}">${esc(u.name)}</option>`).join('')}<option value="">— без исполнителя —</option></select>
+      <select class="input" id="bulkTo">${S.team.map(u => `<option value="${esc(u.login)}">${esc(u.name)}</option>`).join('')}<option value="">— без исполнителя —</option></select>
       <button class="btn primary small" data-act="bulkAssign">Применить</button>
       <button class="btn small" data-act="bulkClear">Снять выбор</button></div>` : ''}`;
   }
@@ -1768,7 +1786,7 @@ const DB = (() => {
     const scope = scopeAll();
     const s = stats(scope, f.stage);
     const title = f.who === 'all' ? 'Все виды' : f.who === 'none' ? 'Без исполнителя' : `Виды: ${esc(userName(f.who))}`;
-    const lead = `${scope.length} ${plural(scope.length, 'вид', 'вида', 'видов')}${f.who === 'all' ? ` у ${S.users.length} человек` : ''} · выполнено ${s.done} из ${s.total} ${plural(s.total, 'документа', 'документов', 'документов')}`;
+    const lead = `${scope.length} ${plural(scope.length, 'вид', 'вида', 'видов')}${f.who === 'all' ? ` у ${S.team.length} человек` : ''} · выполнено ${s.done} из ${s.total} ${plural(s.total, 'документа', 'документов', 'документов')}`;
     return `
       ${stageBar('all')}
       ${hero(s, 'all', title, lead, f.stage)}
@@ -1783,10 +1801,10 @@ const DB = (() => {
     if (pts.length < 2) return '<div class="empty"><div class="ico">📈</div>График появится после загрузки протоколов</div>';
     const W = 760, H = 240, L = 36, R = 12, T = 12, B = 26;
     const t0 = pts[0].t, t1 = Math.max(pts[pts.length - 1].t, t0 + 60000);
-    const maxY = Math.max(...S.users.map(u => S.kinds.filter(k => k.assignee === u.login && k.status !== 'noinstance').length), 1);
+    const maxY = Math.max(...S.team.map(u => S.kinds.filter(k => k.assignee === u.login && k.status !== 'noinstance').length), 1);
     const x = t => L + ((t - t0) / (t1 - t0)) * (W - L - R);
     const y = v => T + (1 - v / maxY) * (H - T - B);
-    const lines = S.users.map(u => {
+    const lines = S.team.map(u => {
       let c = 0;
       const p = [[x(t0), y(0)]];
       pts.filter(q => q.who === u.login).forEach(q => { p.push([x(q.t), y(c)]); c++; p.push([x(q.t), y(c)]); });
@@ -1797,12 +1815,12 @@ const DB = (() => {
     const grid = [...new Set(ticks)].map(v => `<line class="grid-l" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v}</text>`).join('');
     const xt = [0, .5, 1].map(f => { const t = t0 + f * (t1 - t0); return `<text x="${x(t)}" y="${H - 6}" text-anchor="${f === 0 ? 'start' : f === 1 ? 'end' : 'middle'}">${fmtDT(t)}</text>`; }).join('');
     return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${grid}${xt}${lines}</svg>
-      <div class="legend">${S.users.map(u => `<span><i class="sw" style="background:${color(u.login)}"></i>${esc(u.name)}</span>`).join('')}</div>`;
+      <div class="legend">${S.team.map(u => `<span><i class="sw" style="background:${color(u.login)}"></i>${esc(u.name)}</span>`).join('')}</div>`;
   }
 
   function pageTeam() {
     const total = stats(S.kinds, 1);
-    const cards = S.users.map(u => {
+    const cards = S.team.map(u => {
       const s = stats(S.kinds.filter(k => k.assignee === u.login), 1);
       const open2 = stage2Open(u.login) && hasStage2(u.login);
       const s2 = open2 ? stats(viewKinds(2).filter(k => k.assignee === u.login), 2) : null;
@@ -1822,7 +1840,7 @@ const DB = (() => {
       </div>`;
     }).join('');
     return `
-      ${hero(total, 'all', 'Команда', `${S.users.length} человек · ${total.total} документов к проверке на этапе 1 · выполнено ${total.done}`)}
+      ${hero(total, 'all', 'Команда', `${S.team.length} человек · ${total.total} документов к проверке на этапе 1 · выполнено ${total.done}`)}
       <div class="team section-gap">${cards}</div>
       <div class="two">
         <div class="card card-pad"><h3>Динамика: выполнено видов</h3>${teamChart()}</div>
@@ -2139,7 +2157,7 @@ const DB = (() => {
             <input type="file" multiple accept=".txt,.log,text/plain" class="hidden"></div>
         </div>
         ${S.me.isAdmin ? `<div class="section"><h4>Исполнитель</h4>
-          <div style="display:flex;gap:8px;flex-wrap:wrap"><select class="input" id="reassign">${S.users.map(u => `<option value="${esc(u.login)}" ${k.assignee === u.login ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}
+          <div style="display:flex;gap:8px;flex-wrap:wrap"><select class="input" id="reassign">${S.team.map(u => `<option value="${esc(u.login)}" ${k.assignee === u.login ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}
           <option value="" ${!k.assignee ? 'selected' : ''}>— без исполнителя —</option></select>
           <button class="btn" data-act="reassign">Назначить</button></div></div>` : ''}
         <div class="kbd-hint"><span><kbd>←</kbd> <kbd>→</kbd> соседние виды</span><span><kbd>Esc</kbd> закрыть</span></div>`;
@@ -2234,7 +2252,7 @@ const DB = (() => {
   let dragDepth = 0;
   const isFileDrag = e => e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files');
   function showDropOverlay() {
-    if ($('.drop-overlay') || !S.me) return;
+    if ($('.drop-overlay') || !S.me || isObserver()) return;
     const d = document.createElement('div');
     d.className = 'drop-overlay';
     d.innerHTML = `<div class="box">${I.upload}<b>Отпустите — протоколы будут разобраны</b><div class="muted">выполненные документы отметятся автоматически</div></div>`;
@@ -2273,6 +2291,7 @@ const DB = (() => {
   }
 
   async function processFiles(files, hint) {
+    if (isObserver()) { toast('Наблюдатель не загружает протоколы', true); return; }
     if (S.uploading) { toast('Дождитесь окончания текущей загрузки'); return; }
     files = files.filter(f => f.size > 0);
     if (!files.length) return;
@@ -2471,6 +2490,7 @@ const DB = (() => {
       return;
     }
     if (t.tagName === 'A') e.preventDefault();
+    if (isObserver() && WRITE_ACTS.has(act)) { toast('Наблюдатель только просматривает — действия недоступны', true); return; }
     switch (act) {
       case 'theme': toggleTheme(); break;
       case 'menu': S.menu = !S.menu; renderShell(); break;
