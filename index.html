@@ -825,8 +825,10 @@ const DB = (() => {
           const { data, error } = await this.sb.storage.from('protocols').download(r.storage_path);
           if (error || !data) continue;
           const gz = await gzipB64(await data.text());
-          if (gz && !(await this.sb.rpc('set_upload_raw', { p_id: r.id, p_raw: gz })).error) done++;
-        } catch { }
+          const res = gz && await this.sb.rpc('set_upload_raw', { p_id: r.id, p_raw: gz });
+          if (res && !res.error) done++;
+          else if (res && res.error) console.warn('set_upload_raw', r.id, res.error.message);
+        } catch (e) { console.warn('backfill', r.id, e); }
       }
       return done;
     }
@@ -1440,7 +1442,10 @@ const DB = (() => {
     $('#app').innerHTML = '';
     route();
     // фоном: копии старых протоколов в базу (для разбора ошибок разработчиком), по 5 за раз
-    setTimeout(async () => { try { while (await DB.backfillRaw(5) > 0) { } } catch { } }, 4000);
+    // копии протоколов в базе (для разработчика): при входе и потом каждые 3 минуты — дописываются и загруженные со старых вкладок
+    const backfill = async () => { try { while (await DB.backfillRaw(5) > 0) { } } catch (e) { console.warn('backfill', e); } };
+    setTimeout(backfill, 4000);
+    setInterval(backfill, 180000);
   }
 
   function route() {
