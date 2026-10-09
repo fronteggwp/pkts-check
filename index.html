@@ -641,7 +641,7 @@ const DB = (() => {
 
   const kindFromRow = r => ({
     code: r.code, name: r.name || '', doctype: r.doctype, category: r.category || (r.doctype === 'Passport' ? 'passport' : 'summary'),
-    guid: r.guid, assignee: r.assignee, algorithms: r.algorithms || [], linkAlgs: r.link_algs || [],
+    guid: r.guid, ps: r.ps || '', assignee: r.assignee, algorithms: r.algorithms || [], linkAlgs: r.link_algs || [],   // ps — набор параметров первого этапа ('' — BatchRun)
     reviewStatus: r.review_status, reviewComment: r.review_comment, reviewBy: r.review_by, reviewAt: r.review_at,
     review2Status: r.review2_status, review2Comment: r.review2_comment, review2By: r.review2_by, review2At: r.review2_at,
   });
@@ -1257,7 +1257,8 @@ const DB = (() => {
 
     const secs = [];
     S.kinds = kinds.map(k => {
-      const l1 = (k.guid ? (byUnit.get(unitKey(k.guid, '')) || []) : []).concat(byUnit.get('k:' + k.code) || []).sort(cmp);
+      // первый этап: экземпляр вида со своим набором (у аналитических — код набора из «Все гуиды»); прежние прогоны с BatchRun тоже учитываются
+      const l1 = (k.guid ? (byUnit.get(unitKey(k.guid, k.ps || '')) || []).concat(k.ps ? (byUnit.get(unitKey(k.guid, '')) || []) : []) : []).concat(byUnit.get('k:' + k.code) || []).sort(cmp);
       const s1 = docState(l1);
       if (s1.sec != null) secs.push(s1.sec);
       const docs2 = (instByKind.get(k.code) || []).sort((a, b) => a.ord - b.ord)
@@ -1336,7 +1337,7 @@ const DB = (() => {
     const mine = S.kinds.filter(k => k.assignee === login);
     return stage === 2
       ? mine.flatMap(k => k.docs2.map(d => ({ kind: k.code, doctype: d.doctype, guid: d.guid, ps: d.ps, st: d.st })))
-      : mine.filter(k => k.guid).map(k => ({ kind: k.code, doctype: k.doctype, guid: k.guid, ps: '', st: k.s1 }));
+      : mine.filter(k => k.guid).map(k => ({ kind: k.code, doctype: k.doctype, guid: k.guid, ps: k.ps || '', st: k.s1 }));
   }
   const remainingDocs = (login, stage) => docsOf(login, stage).filter(d => d.st.status === 'pending' || d.st.status === 'interrupted');
   // остаток + документы, где были ошибки (все, независимо от исправления/выкладки)
@@ -1627,7 +1628,7 @@ const DB = (() => {
       <div class="card step">
         <div class="t"><span class="n">2</span>Запустите в ПиКТС 2.0</div>
         <div class="d">«Пакетное выполнение алгоритмов актуализации» → загрузите скачанный файл. Набор параметров уже указан в JSON${stage === 2 ? ' (для аналитических — свой набор у каждого документа)' : ''}:</div>
-        <div class="copybox"><span style="flex:1">"paramValueSetCode": "${stage === 2 ? 'BatchRun / код набора' : 'BatchRun'}"</span></div>
+        <div class="copybox"><span style="flex:1">"paramValueSetCode": "BatchRun / код набора (у аналитических отчётов — свой, из «Все гуиды»)"</span></div>
         <div class="d" style="flex:0">Когда пакет закончится (или сервер упадёт) — сохраните протокол в .txt.</div>
       </div>
       <div class="card step">
@@ -2093,7 +2094,7 @@ const DB = (() => {
     runs.sort((a, b) => ts(b.startAt) - ts(a.startAt) || b.uploadId - a.uploadId || b.id - a.id);
     // документы вида: этап 1 + этап 2
     const docs = [];
-    if (k.guid || k.s1.last) docs.push({ stage: 1, guid: k.guid, ps: '', st: k.s1 });
+    if (k.guid || k.s1.last) docs.push({ stage: 1, guid: k.guid, ps: k.ps || '', st: k.s1 });
     k.docs2.forEach(d => docs.push({ stage: 2, guid: d.guid, ps: d.ps, st: d.st }));
     const finOf = d => d.st.fin ? full.get(d.st.fin.id) || d.st.fin : null;
     const lastFin = finOf(docs[0] || { st: k.s1 });
@@ -2191,7 +2192,7 @@ const DB = (() => {
         const u = up.get(r.uploadId) || {};
         const ee = effErrors({ ...r, errAlgs: r.errAlgs || (r.errors || []).map(e => e.alg || '') });
         const stc = r.finished ? (ee.eff ? 'errors' : 'ok') : 'interrupted';
-        const st2 = r.guid && (r.guid !== k.guid || r.ps);
+        const st2 = r.guid && (r.guid !== k.guid || (r.ps && r.ps !== (k.ps || '')));
         return `<div class="tl ${stc}"><div class="h"><div><b>${fmtDT(r.startAt, true)}</b> · ${r.finished ? (ee.eff ? `с ошибками (${ee.eff})` : 'выполнен') : 'прерван'}${r.total ? ` <span class="faint">· документ ${r.idx} из ${r.total}</span>` : ''}${st2 ? ` <span class="stage-chip">этап 2</span> <span class="faint mono" style="font-size:11.5px">${esc(shortGuid(r.guid))}${r.ps ? ' · ' + esc(psLabel(r.ps)) : ''}</span>` : ''}</div><div class="nowrap"><b>${fmtSec(docSec(r))}</b></div></div>
           <div class="faint" style="font-size:12.5px">${esc(u.fileName || '')} · загрузил(а) ${esc(userName(u.by))} ${ago(u.at)}${r.match === 'auto' ? ' · вид определён по алгоритмам' : r.match === 'manual' || r.match === 'hint' ? ' · вид указан вручную' : ''}</div></div>`;
       }).join('')}</div>` : '<div class="empty"><div class="ico">⏳</div>Прогонов ещё не было</div>';
