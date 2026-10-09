@@ -475,6 +475,20 @@ body.observer [data-act="dlRemaining"], body.observer [data-act="dlRemainingErr"
 .sm-info { margin-right: auto; font-size: 13px; line-height: 1.45; }
 td.small { font-size: 12.5px; }
 
+/* кнопка «Умная выгрузка JSON» — самая заметная */
+.btn.smart-btn { position: relative; overflow: hidden; padding: 11px 18px; font-size: 14.5px; font-weight: 750; color: #fff; border: 0;
+  background: linear-gradient(120deg, #ff6a3d, #ff3d8b 35%, #8a5cff 70%, #3d8bff); background-size: 220% 220%;
+  box-shadow: 0 10px 26px -10px rgba(255, 61, 139, .75), 0 0 0 1px rgba(255, 255, 255, .12) inset; animation: smartGrad 6s ease infinite; }
+.btn.smart-btn:hover { transform: translateY(-1px); box-shadow: 0 14px 30px -10px rgba(138, 92, 255, .85), 0 0 0 1px rgba(255, 255, 255, .2) inset; color: #fff; }
+.btn.smart-btn::after { content: ''; position: absolute; top: 0; left: -60%; width: 40%; height: 100%; transform: skewX(-20deg);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .45), transparent); animation: smartShine 3.2s ease-in-out infinite; }
+.btn.smart-btn .spark { font-size: 16px; margin-right: 2px; display: inline-block; animation: smartSpark 2.4s ease-in-out infinite; }
+.btn.smart-btn .smart-tag { margin-left: 8px; padding: 2px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; background: rgba(255, 255, 255, .22); }
+@keyframes smartGrad { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+@keyframes smartShine { 0% { left: -60%; } 55%, 100% { left: 130%; } }
+@keyframes smartSpark { 0%, 100% { transform: scale(1) rotate(0); } 50% { transform: scale(1.25) rotate(20deg); } }
+@media (prefers-reduced-motion: reduce) { .btn.smart-btn, .btn.smart-btn::after, .btn.smart-btn .spark { animation: none; } }
+
 </style>
 </head>
 <body>
@@ -1831,11 +1845,11 @@ const DB = (() => {
         <div class="t"><span class="n">1</span>Скачайте пакет${stage === 2 ? ' этапа 2' : ''}</div>
         <div class="d">${n ? `JSON только с тем, что ещё не выполнилось — <b style="color:var(--text)">${n} ${plural(n, 'документ', 'документа', 'документов')}</b>. После падения сервера просто скачайте его заново.` : 'Все документы выполнены — запускать нечего.'}</div>
         <div class="acts">
-          <button class="btn primary" data-act="dlRemaining" data-login="${esc(login)}" data-st="${stage}" ${n ? '' : 'disabled'}>${I.dl}JSON остатка</button>
+          <button class="btn smart-btn" data-act="smart" data-login="${esc(login)}" data-st="${stage}" title="Не проверявшиеся, исправленные и оптимизированные (выложенные) — от быстрых к медленным, тяжёлые в конце"><span class="spark">✦</span>Умная выгрузка JSON<span class="smart-tag">рекомендуем</span></button>
+          <button class="btn" data-act="dlRemaining" data-login="${esc(login)}" data-st="${stage}" ${n ? '' : 'disabled'}>${I.dl}JSON остатка</button>
           <button class="btn" data-act="dlRemainingErr" data-login="${esc(login)}" data-st="${stage}" ${nRE ? '' : 'disabled'} title="Невыполненные и прерванные документы плюс все документы, в которых были ошибки">${I.dl}остаток + ошибочные${nRE ? ` (${nRE})` : ''}</button>
           <button class="btn" data-act="dlErrors" data-login="${esc(login)}" data-st="${stage}" ${ed.ready.length ? '' : 'disabled'} title="Перепрогон документов, у которых алгоритмы с ошибками исправлены и выложены на сервер">${I.rerun}JSON с ошибками${ed.ready.length ? ` (${ed.ready.length})` : ''}</button>
           <button class="btn" data-act="dlPerf" data-login="${esc(login)}" data-st="${stage}" ${pd.ready.length ? '' : 'disabled'} title="Перепроверка документов, где выполнялись оптимизированные и уже выложенные алгоритмы">${I.rerun}JSON с оптимизированными${pd.ready.length ? ` (${pd.ready.length})` : ''}</button>
-          <button class="btn" data-act="smart" data-login="${esc(login)}" data-st="${stage}" title="Не проверявшиеся, исправленные и оптимизированные (выложенные) — от быстрых к медленным, тяжёлые в конце">${I.dl}Умная выгрузка JSON</button>
           <button class="btn small ghost" data-act="dlFull" data-login="${esc(login)}" data-st="${stage}" title="Все назначенные документы этапа">полный JSON</button>
           <button class="btn small ghost" data-act="dlCsv" data-login="${esc(login)}">таблица CSV</button>
         </div>
