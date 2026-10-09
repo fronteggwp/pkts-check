@@ -1352,6 +1352,20 @@ const DB = (() => {
     return { all: e, ready: e.filter(d => d.st.fix === 'deployed'), waiting: e.filter(d => d.st.fix === 'pending'), open: e.filter(d => !d.st.fix) };
   }
 
+  // «Все виды»: документы видов страницы (этап 1 — экземпляр вида, этап 2 — экземпляры второго этапа), ещё не выполнявшиеся,
+  // плюс документы с ошибками, у которых исправление уже выложено на сервер, а последний прогон шёл меньше 5 минут
+  function docsOfKinds(kinds, stage) {
+    return stage === 2
+      ? kinds.flatMap(k => (k.docs2 || []).map(d => ({ kind: k.code, doctype: d.doctype, guid: d.guid, ps: d.ps, st: d.st })))
+      : kinds.filter(k => k.guid).map(k => ({ kind: k.code, doctype: k.doctype, guid: k.guid, ps: k.ps || '', st: k.s1 }));
+  }
+  function pendingFixedDocs(kinds, stage) {
+    const all = docsOfKinds(kinds, stage);
+    const pending = all.filter(d => d.st.status === 'pending');
+    const fixed = all.filter(d => d.st.status === 'errors' && d.st.fix === 'deployed' && d.st.sec != null && d.st.sec < SLOW_SEC);
+    return { pending, fixed, all: pending.concat(fixed) };
+  }
+
   // JSON пакета: группы (тип документа, набор параметров) в порядке, в котором их выполняет сервер; items — для сопоставления N/M протокола
   function buildBatch(docs) {
     const seen = new Set();
@@ -1369,7 +1383,7 @@ const DB = (() => {
   async function downloadBatch(login, stage, docs, suffix) {
     if (!docs.length) { toast('Нечего запускать'); return; }
     const b = buildBatch(docs);
-    downloadText(`перепроверка_${userName(login)}${stage === 2 ? '_этап2' : ''}${suffix ? '_' + suffix : ''}_${stamp()}.txt`, b.text);
+    downloadText(`перепроверка_${login === 'all' ? 'все' : login === 'none' ? 'без_исполнителя' : userName(login)}${stage === 2 ? '_этап2' : ''}${suffix ? '_' + suffix : ''}_${stamp()}.txt`, b.text);
     toast(`Скачан JSON: ${b.count} ${plural(b.count, 'документ', 'документа', 'документов')}`);
     // порядок пакета запоминается: по номеру N/M в протоколе потом определяется набор параметров
     try { await DB.saveBatch(S.me.login, stage, b.items); } catch (e) { console.warn('batch', e); }
@@ -1792,6 +1806,14 @@ const DB = (() => {
       ${stageBar('all')}
       ${hero(s, 'all', title, lead, f.stage)}
       ${f.who !== 'all' && f.who !== 'none' ? steps(f.who, s, f.stage) : ''}
+      ${(() => {
+        const pf = pendingFixedDocs(scope, f.stage);
+        return `<div class="card" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 16px;margin-bottom:12px">
+          <button class="btn primary" data-act="dlAllPendFix" data-st="${f.stage}" ${pf.all.length ? '' : 'disabled'}
+            title="Документы, которые ещё не выполнялись, и документы с ошибками, исправление которых уже выложено на сервер, а последний прогон шёл меньше 5 минут">${I.dl}JSON: не выполнялись + исправленные (${pf.all.length})</button>
+          <span class="muted">не выполнялись: ${pf.pending.length} · с ошибками, исправлены и выложены, прогон &lt; 5 мин: ${pf.fixed.length}</span>
+        </div>`;
+      })()}
       ${toolbar('all', scope)}
       <div id="tbl">${kindsTable(filterKinds(viewKinds(f.stage), f), 'all')}</div>`;
   }
@@ -2616,6 +2638,13 @@ const DB = (() => {
         const pd = perfDocs(t.dataset.login, st);
         if (!pd.ready.length) { toast('Пока нечего перепроверять: оптимизированные алгоритмы ещё не выложены', true); break; }
         await downloadBatch(t.dataset.login, st, pd.ready, 'оптимизированные');
+        break;
+      }
+      case 'dlAllPendFix': {
+        const st = +t.dataset.st || 1;
+        const pf = pendingFixedDocs(scopeAll(), st);
+        if (!pf.all.length) { toast('Нечего запускать: невыполненных и исправленных быстрых документов нет'); break; }
+        await downloadBatch(S.f.all.who, st, pf.all, 'не_выполнялись_и_исправленные');
         break;
       }
       case 'dlFull': { const st = +t.dataset.st || 1; await downloadBatch(t.dataset.login, st, docsOf(t.dataset.login, st), ''); break; }
