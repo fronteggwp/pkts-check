@@ -41,6 +41,8 @@
   --int-soft: #fff2db;
   --pend: #8e98ab;
   --pend-soft: #eff1f5;
+  --srv: #0e9aa7;
+  --srv-soft: #e0f5f6;
   --noi: #b9c1cf;
   --rev: #2f6bff;
   --rev-soft: #e7efff;
@@ -77,6 +79,8 @@
   --int-soft: #3a2c14;
   --pend: #7f8aa0;
   --pend-soft: #1e2636;
+  --srv: #3cc8d4;
+  --srv-soft: #10303a;
   --noi: #48536a;
   --rev: #6d9bff;
   --rev-soft: #1b2a4d;
@@ -255,6 +259,8 @@ table.t td.num, table.t th.num { text-align: right; font-variant-numeric: tabula
 .pill.errors { background: var(--err-soft); color: var(--err); }
 .pill.interrupted { background: var(--int-soft); color: var(--int); }
 .pill.pending { background: var(--pend-soft); color: var(--muted); }
+.pill.server { background: var(--srv-soft); color: var(--srv); }
+.pill.srvp { background: var(--srv-soft); color: var(--srv); }
 .pill.noinstance { background: transparent; color: var(--faint); border: 1px dashed var(--noi); }
 .pill.rev { background: var(--rev-soft); color: var(--rev); }
 .pill.issue { background: var(--issue-soft); color: var(--issue); }
@@ -307,6 +313,7 @@ table.t td.num, table.t th.num { text-align: right; font-variant-numeric: tabula
 .tl.ok::before { border-color: var(--ok); }
 .tl.errors::before { border-color: var(--err); }
 .tl.interrupted::before { border-color: var(--int); }
+.tl.server::before { border-color: var(--srv); }
 .tl .h { display: flex; justify-content: space-between; gap: 10px; }
 .close-x { margin-left: 4px; }
 .kbd-hint { color: var(--faint); font-size: 12px; display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
@@ -489,6 +496,12 @@ td.small { font-size: 12.5px; }
 @keyframes smartSpark { 0%, 100% { transform: scale(1) rotate(0); } 50% { transform: scale(1.25) rotate(20deg); } }
 @media (prefers-reduced-motion: reduce) { .btn.smart-btn, .btn.smart-btn::after, .btn.smart-btn .spark { animation: none; } }
 
+/* серверные проблемы в карточке вида */
+.srvbox { margin: 8px 0 12px; padding: 10px 12px; border-radius: 12px; background: var(--srv-soft); border: 1px solid color-mix(in srgb, var(--srv) 35%, transparent); }
+.srvbox .a { display: flex; align-items: center; gap: 6px; font-weight: 700; color: var(--srv); margin-bottom: 6px; flex-wrap: wrap; }
+.srv-line { font-size: 13px; padding: 4px 0; border-top: 1px dashed color-mix(in srgb, var(--srv) 25%, transparent); display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.srv-line:first-of-type { border-top: 0; }
+
 </style>
 </head>
 <body>
@@ -519,6 +532,24 @@ const LogParser = (() => {
     ver: /^(.+?):\s*\[PKTS-VER\s+([0-9.]+)\]/,   // метка версии алгоритма (первая строка Run)
     summary: /^Сводка:\s*(.*)$/,
   };
+
+  // «Серверные проблемы» — не ошибки наших алгоритмов: незаданные/невыбранные параметры и сообщения проверки данных, подписанты,
+  // не скомпилирован алгоритм проверки, нет колонки в шаблоне, обрыв соединения / перезапуск. Таймауты 57P01/57014 (запрос снят по
+  // лимиту ~10 мин) — наши: алгоритм медленный, его оптимизируют. Те же правила — в tools/errors_export.py и tools/backfill_srv.py.
+  const SRV_PARAM = /не\s+задан|не\s+заданы|не\s+задано|не\s+выбран|не\s+заполнен|не\s+указан|не\s+введен|ошибки\s+заполнения\s+параметров|не\s+все\s+обязательные\s+параметры|заданы\s+не\s+все\s+параметры|обязательн\w*\s+значени\w*\s+параметр|необходимо\s+(выбрать|заполнить|указать)|выберите\s|заполните\s/i;
+  const SRV_NOT_PARAM = /PKTS-QUERYLOOP|PKTS-COLSAFE|PKTS-LINK|Не найдены данные по заданным параметрам|нет в шаблоне/i;
+  function srvError(alg, msg, details) {
+    const m = String(msg || '');
+    // таймаут — наш (в т.ч. «transient failure» EF, внутри которого 57P01)
+    if (/57P01|57014/.test(m + ' ' + (details || '')) && !/Connection refused|Exception while reading from stream/.test(m)) return false;
+    if (/terminating connection|transient failure|Connection refused|Exception while reading from stream/.test(m)) return true;
+    if (/несуществующей колонке/.test(m)) return true;
+    if (/^Внимание|Ошибки заполнения параметров|Не удалось выполнить алгоритм проверки значений|не скомпилирован|Не получилось найти сборку|подписант|должно быть|Заполните/i.test(m)) return true;
+    if (/^Не (задан|указан|заполнен|выбран|введен)/i.test(m)) return true;
+    if (/(_Param|Валидация\w*|ПроверкаПараметров\w*|ВходныеПараметрыОтчета|ParamCheck|_00_Param)$/.test(alg || '')) return true;
+    return SRV_PARAM.test(m) && !SRV_NOT_PARAM.test(m);
+  }
+  const srvWarn = msg => SRV_PARAM.test(msg || '') && !SRV_NOT_PARAM.test(msg || '');
 
   function dur(s) {
     const m = /^(?:(\d+)\.)?(\d+):(\d{2}):(\d{2}(?:\.\d+)?)$/.exec((s || '').trim());
@@ -561,7 +592,7 @@ const LogParser = (() => {
       cur = null;
     }
     function newDoc(ts, implicit) {
-      const c = { doc: { guid: null, doctype: null, idx: 0, total: 0, startAt: ts, endAt: null, loadSec: null, finished: false, implicit, algs: [], errors: [], warnings: 0, running: [], vers: {} }, algs: {}, open: {}, loadDone: false };
+      const c = { doc: { guid: null, doctype: null, idx: 0, total: 0, startAt: ts, endAt: null, loadSec: null, finished: false, implicit, algs: [], errors: [], warnings: 0, srvWarns: [], running: [], vers: {} }, algs: {}, open: {}, loadDone: false };
       res.docs.push(c.doc);
       return c;
     }
@@ -648,7 +679,7 @@ const LogParser = (() => {
         else addError(null, msg, ts);
         continue;
       }
-      if (type === 'Warning') cur.doc.warnings++;
+      if (type === 'Warning') { cur.doc.warnings++; if (srvWarn(msg) && cur.doc.srvWarns.length < 50) cur.doc.srvWarns.push(msg.slice(0, 300)); }
     }
     close(false, null);
     for (const d of res.docs) d.algs.forEach(a => { a.totalSec = Math.round(a.totalSec * 1000) / 1000; a.maxSec = Math.round(a.maxSec * 1000) / 1000; });
@@ -672,7 +703,7 @@ const LogParser = (() => {
     return { code: best.cover >= 0.8 && unique ? best.k.code : null, candidates };
   }
 
-  return { parse, decode, matchKind, dur, isLink };
+  return { parse, decode, matchKind, dur, isLink, srvError, srvWarn };
 })();
 if (typeof module !== 'undefined') module.exports = LogParser;
 
@@ -690,6 +721,11 @@ const DB = (() => {
     review2Status: r.review2_status, review2Comment: r.review2_comment, review2By: r.review2_by, review2At: r.review2_at,
   });
   const errAlgsOf = errors => (errors || []).map(e => e.alg || '');
+  // наши ошибки и серверные проблемы (не задан параметр, проверка данных, подписанты, обрыв соединения…) — по LogParser.srvError/srvWarn
+  const srvError = (alg, msg, details) => typeof LogParser !== 'undefined' && LogParser.srvError ? LogParser.srvError(alg, msg, details) : false;
+  const ownErrAlgsOf = errors => (errors || []).filter(e => !srvError(e.alg, e.message, e.details)).map(e => e.alg || '');
+  const srvProblemsOf = r => (r.errors || []).filter(e => srvError(e.alg, e.message, e.details)).map(e => ({ alg: e.alg || '', text: String(e.message || '').slice(0, 300), kind: 'error' }))
+    .concat((r.srvWarns || []).map(t => ({ alg: '', text: t, kind: 'warn' })));
   const runFromRow = r => ({
     id: r.id, uploadId: r.upload_id, pos: r.pos, guid: r.guid, doctype: r.doctype, idx: r.idx, total: r.total,
     startAt: r.start_at, endAt: r.end_at, loadSec: r.load_sec, finished: r.finished, implicit: r.implicit,
@@ -697,6 +733,7 @@ const DB = (() => {
     warnings: r.warnings || 0, running: r.running || [], algs: r.algs, errors: r.errors,
     ps: r.ps || '', errAlgs: r.err_algs && r.err_algs.length ? r.err_algs : (r.error_count ? null : []), batchId: r.batch_id || null,
     algNames: r.alg_names || [], algVers: r.alg_vers || {},
+    ownErrAlgs: Array.isArray(r.own_err_algs) ? r.own_err_algs : null, srvProblems: r.srv_problems || [],
   });
   const runToRow = r => ({
     upload_id: r.uploadId, pos: r.pos, guid: r.guid, doctype: r.doctype, idx: r.idx, total: r.total, start_at: r.startAt,
@@ -704,6 +741,7 @@ const DB = (() => {
     candidates: r.candidates || [], algs: r.algs || [], errors: r.errors || [], error_count: (r.errors || []).length,
     warnings: r.warnings || 0, running: r.running || [], ps: r.ps || '', err_algs: errAlgsOf(r.errors), batch_id: r.batchId || null,
     alg_names: (r.algs || []).map(a => a.name), alg_vers: r.vers || {},
+    own_err_algs: ownErrAlgsOf(r.errors), srv_problems: srvProblemsOf(r),
   });
   const uploadFromRow = r => ({
     id: r.id, fileName: r.file_name, by: r.by_login, at: r.at, size: r.size, operations: r.operations || [], batch: r.batch,
@@ -720,7 +758,7 @@ const DB = (() => {
     return btoa(bin);
   }
   const eventFromRow = r => ({ id: r.id, at: r.at, by: r.by_login, text: r.text, kind: r.kind, uploadId: r.upload_id });
-  const LIGHT = 'id,upload_id,pos,guid,doctype,idx,total,start_at,end_at,load_sec,finished,implicit,kind_code,match,error_count,warnings,running,ps,err_algs,batch_id,alg_names,alg_vers';
+  const LIGHT = 'id,upload_id,pos,guid,doctype,idx,total,start_at,end_at,load_sec,finished,implicit,kind_code,match,error_count,warnings,running,ps,err_algs,batch_id,alg_names,alg_vers,own_err_algs,srv_problems';
   const versionFromRow = r => ({ id: r.id, name: r.name, version: r.version, note: r.note, at: r.created_at, by: r.created_by, deployId: r.deploy_id, commit: r.commit, kind: r.kind || 'fix' });
   const deployFromRow = r => ({ id: r.id, at: r.at, by: r.by_login, note: r.note, algCount: r.alg_count });
   const flagFromRow = r => ({ name: r.name, ignored: r.ignored, note: r.note, by: r.by_login, at: r.at });
@@ -974,7 +1012,7 @@ const DB = (() => {
     async saveUpload(meta, runs) {
       const id = (this.st.uploads.reduce((m, u) => Math.max(m, u.id), 0)) + 1;
       this.st.uploads.push({ ...meta, id, at: new Date().toISOString() });
-      runs.forEach(r => this.st.runs.push({ ...r, id: this.st.nextId++, uploadId: id, errorCount: (r.errors || []).length, errAlgs: errAlgsOf(r.errors), algNames: (r.algs || []).map(a => a.name), algVers: r.vers || {}, ps: r.ps || '' }));
+      runs.forEach(r => this.st.runs.push({ ...r, id: this.st.nextId++, uploadId: id, errorCount: (r.errors || []).length, errAlgs: errAlgsOf(r.errors), algNames: (r.algs || []).map(a => a.name), algVers: r.vers || {}, ps: r.ps || '', ownErrAlgs: ownErrAlgsOf(r.errors), srvProblems: srvProblemsOf(r) }));
       this.save();
       return id;
     }
@@ -1027,12 +1065,15 @@ const DB = (() => {
   const STATUS = {
     ok: { label: 'Выполнен', many: 'Выполнено', color: 'var(--ok)' },
     errors: { label: 'С ошибками', many: 'С ошибками', color: 'var(--err)' },
+    server: { label: 'Серверные проблемы', many: 'Серверные проблемы', color: 'var(--srv)' },
     partial: { label: 'Частично', many: 'Частично', color: 'var(--accent)' },
     interrupted: { label: 'Прерван', many: 'Прервано', color: 'var(--int)' },
     pending: { label: 'Не выполнялся', many: 'Не выполнялось', color: 'var(--pend)' },
     noinstance: { label: 'Нет экземпляра', many: 'Нет экземпляра', color: 'var(--noi)' },
   };
-  const ORDER = ['interrupted', 'partial', 'pending', 'errors', 'ok', 'noinstance'];
+  const ORDER = ['interrupted', 'partial', 'pending', 'errors', 'server', 'ok', 'noinstance'];
+  // выполнен: без ошибок, с нашими ошибками или только с серверными проблемами
+  const isDone = st => st === 'ok' || st === 'errors' || st === 'server';
   const PALETTE = ['#4255ff', '#e8590c', '#0ca678', '#9c36b5', '#1098ad', '#d6336c'];
   const STAGE2_INFO = 'паспорта и сводные — ещё до 10 других документов вида, аналитические — тот же документ со всеми его наборами параметров';
 
@@ -1166,6 +1207,7 @@ const DB = (() => {
   const ignored = name => !!(name && S.flags.get(name) && S.flags.get(name).ignored);
   // ошибки прогона; «не трогать» — только отметка для разработчика: ошибки считаются, ign — сколько из них в таких алгоритмах
   function effErrors(r) {
+    if (Array.isArray(r.ownErrAlgs)) { const l = r.ownErrAlgs; return { eff: l.length, ign: l.filter(a => ignored(a)).length, algs: [...new Set(l.filter(Boolean))] }; }
     if (!r.errAlgs) return { eff: r.errorCount, ign: 0, algs: [] };   // старые записи без списка алгоритмов
     return { eff: r.errAlgs.length, ign: r.errAlgs.filter(a => ignored(a)).length, algs: [...new Set(r.errAlgs.filter(Boolean))] };
   }
@@ -1232,11 +1274,12 @@ const DB = (() => {
     const fins = list.filter(r => r.finished);
     const fin = fins[fins.length - 1] || null;
     const last = list[list.length - 1] || null;
-    const st = { runs: list.length, fin, last, status: 'pending', errors: 0, ignored: 0, errAlgs: [], fix: null, sec: null,
+    const st = { runs: list.length, fin, last, status: 'pending', errors: 0, srv: 0, ignored: 0, errAlgs: [], fix: null, sec: null,
       lastRunAt: last ? last.startAt : null, firstDoneAt: fins.length ? fins[0].startAt : null, running: null };
     if (fin) {
       const e = effErrors(fin);
-      Object.assign(st, { errors: e.eff, ignored: e.ign, errAlgs: e.algs, status: e.eff ? 'errors' : 'ok', sec: docSec(fin) });
+      const srv = (fin.srvProblems || []).length;   // серверные проблемы: параметры, проверка данных, подписанты, обрывы
+      Object.assign(st, { errors: e.eff, srv, ignored: e.ign, errAlgs: e.algs, status: e.eff ? 'errors' : srv ? 'server' : 'ok', sec: docSec(fin) });
       if (e.eff) st.fix = fixOf(e.algs, fin);
       st.perf = fixOf(fin.algNames || [], fin, true);   // в документе выполнялись оптимизированные алгоритмы
     } else if (last) {
@@ -1247,19 +1290,20 @@ const DB = (() => {
   }
 
   function agg2(docs) {
-    const a = { total: docs.length, ok: 0, errors: 0, interrupted: 0, pending: 0, errSum: 0, ignSum: 0, secs: [], lastRunAt: null, firstDoneAt: null, fixDeployed: 0, fixPending: 0, perfDeployed: 0 };
+    const a = { total: docs.length, ok: 0, errors: 0, server: 0, interrupted: 0, pending: 0, errSum: 0, srvSum: 0, ignSum: 0, secs: [], lastRunAt: null, firstDoneAt: null, fixDeployed: 0, fixPending: 0, perfDeployed: 0 };
     for (const d of docs) {
       a[d.st.status]++;
       a.errSum += d.st.errors;
+      a.srvSum += d.st.srv || 0;
       a.ignSum += d.st.ignored;
       if (d.st.sec != null) a.secs.push(d.st.sec);
       if (d.st.lastRunAt && ts(d.st.lastRunAt) > ts(a.lastRunAt)) a.lastRunAt = d.st.lastRunAt;
       if (d.st.fix === 'deployed') a.fixDeployed++; else if (d.st.fix === 'pending') a.fixPending++;
       if (d.st.perf === 'deployed') a.perfDeployed++;
     }
-    a.done = a.ok + a.errors;
+    a.done = a.ok + a.errors + a.server;
     a.remaining = a.pending + a.interrupted;
-    a.status = !a.total ? null : !a.remaining ? (a.errors ? 'errors' : 'ok') : !a.done ? (a.interrupted ? 'interrupted' : 'pending') : 'partial';
+    a.status = !a.total ? null : !a.remaining ? (a.errors ? 'errors' : a.server ? 'server' : 'ok') : !a.done ? (a.interrupted ? 'interrupted' : 'pending') : 'partial';
     return a;
   }
 
@@ -1310,7 +1354,7 @@ const DB = (() => {
       return {
         ...k, algCount: k.algorithms.length, s1,
         status: l1.length ? s1.status : (k.guid ? 'pending' : 'noinstance'),
-        lastRunAt: s1.lastRunAt, docSec: s1.sec, errors: s1.errors, ignored: s1.ignored, fix: s1.fix, perf: s1.perf,
+        lastRunAt: s1.lastRunAt, docSec: s1.sec, errors: s1.errors, srv: s1.srv, ignored: s1.ignored, fix: s1.fix, perf: s1.perf,
         warnings: s1.fin ? s1.fin.warnings : 0, runs: l1.length, finRunId: s1.fin ? s1.fin.id : null,
         firstDoneAt: s1.firstDoneAt, running: s1.running,
         docs2, s2: agg2(docs2),
@@ -1327,7 +1371,7 @@ const DB = (() => {
   // этап человека: второй открывается, когда выполнено 100% документов первого
   function stage1Left(login) {
     const l = S.kinds.filter(k => k.assignee === login && k.guid);
-    return { total: l.length, left: l.filter(k => !(k.status === 'ok' || k.status === 'errors')).length };
+    return { total: l.length, left: l.filter(k => !isDone(k.status)).length };
   }
   const stage2Open = login => { const x = stage1Left(login); return x.total > 0 && x.left === 0; };
   const hasStage2 = login => S.kinds.some(k => k.assignee === login && k.docs2.length);
@@ -1343,7 +1387,7 @@ const DB = (() => {
     if (stage !== 2) return k;
     const a = k.s2;
     return {
-      ...k, status: a.status, errors: a.errSum, ignored: a.ignSum, docSec: a.secs.length ? a.secs.reduce((x, y) => x + y, 0) / a.secs.length : null,
+      ...k, status: a.status, errors: a.errSum, srv: a.srvSum, ignored: a.ignSum, docSec: a.secs.length ? a.secs.reduce((x, y) => x + y, 0) / a.secs.length : null,
       lastRunAt: a.lastRunAt, running: null, progress: a,
       fix: a.fixDeployed ? 'deployed' : a.fixPending ? 'pending' : null, perf: a.perfDeployed ? 'deployed' : null,
       reviewStatus: k.review2Status, reviewComment: k.review2Comment, reviewBy: k.review2By, reviewAt: k.review2At,
@@ -1352,11 +1396,11 @@ const DB = (() => {
   const viewKinds = stage => stage === 2 ? S.kinds.filter(k => k.docs2.length).map(k => viewOf(k, 2)) : S.kinds;
 
   function stats(list, stage) {
-    const s = { all: list.length, total: 0, ok: 0, errors: 0, partial: 0, interrupted: 0, pending: 0, noinstance: 0, reviewed: 0, issues: 0, secs: [] };
+    const s = { all: list.length, total: 0, ok: 0, errors: 0, server: 0, partial: 0, interrupted: 0, pending: 0, noinstance: 0, reviewed: 0, issues: 0, secs: [] };
     for (const k of list) {
       if (stage === 2) {
         const a = k.progress;
-        s.total += a.total; s.ok += a.ok; s.errors += a.errors; s.interrupted += a.interrupted; s.pending += a.pending;
+        s.total += a.total; s.ok += a.ok; s.errors += a.errors; s.server += a.server; s.interrupted += a.interrupted; s.pending += a.pending;
         s.secs.push(...a.secs);
       } else {
         s[k.status]++;
@@ -1366,10 +1410,10 @@ const DB = (() => {
       if (k.reviewStatus === 'ok') s.reviewed++;
       if (k.reviewStatus === 'issue') s.issues++;
     }
-    s.done = s.ok + s.errors;
+    s.done = s.ok + s.errors + s.server;
     s.remaining = s.pending + s.interrupted;
-    s.reviewable = list.filter(k => k.status === 'ok' || k.status === 'errors').length;
-    s.toReview = list.filter(k => (k.status === 'ok' || k.status === 'errors') && !k.reviewStatus).length;
+    s.reviewable = list.filter(k => isDone(k.status)).length;
+    s.toReview = list.filter(k => isDone(k.status) && !k.reviewStatus).length;
     s.pct = !s.total ? 0 : s.done === s.total ? 100 : Math.min(99, Math.round((s.done / s.total) * 100));
     s.avg = s.secs.length >= 3 ? s.secs.reduce((a, b) => a + b, 0) / s.secs.length : S.avgDocSec;
     s.eta = s.avg != null ? s.avg * s.remaining : null;
@@ -1462,7 +1506,7 @@ const DB = (() => {
   // (самый долгий или сумма на 4 потока секций), затем по семейству алгоритмов, затем по типу документа
   function estimateDoc(d, k, stats, stage) {
     const st = d.st;
-    if ((st.status === 'ok' || st.status === 'errors') && st.sec != null) return { sec: st.sec, src: 'прошлый прогон' };
+    if (isDone(st.status) && st.sec != null) return { sec: st.sec, src: 'прошлый прогон' };
     if (st.status === 'interrupted' && st.last) {
       const up = S.uploadsList.find(u => u.id === st.last.uploadId);
       const s = up && up.logTo ? (ts(up.logTo) - ts(st.last.startAt)) / 1000 : null;
@@ -1487,7 +1531,7 @@ const DB = (() => {
       const cat = st.status === 'pending' ? 'new'
         : st.status === 'interrupted' ? 'cut'
         : st.status === 'errors' && st.fix === 'deployed' ? 'fixed'
-        : (st.status === 'ok' || st.status === 'errors') && st.perf === 'deployed' ? 'perf' : null;
+        : isDone(st.status) && st.perf === 'deployed' ? 'perf' : null;
       if (!cat) continue;
       const k = kindBy.get(d.kind);
       const e = estimateDoc(d, k, stats, stage);
@@ -1773,14 +1817,14 @@ const DB = (() => {
     };
     return `<div class="donut" style="width:${size}px;height:${size}px">
       <svg width="${size}" height="${size}"><circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="var(--surface-3)" stroke-width="${stroke}"/>
-        ${seg(s.ok, 'var(--ok)')}${seg(s.errors, 'var(--err)')}${seg(s.interrupted, 'var(--int)')}</svg>
+        ${seg(s.ok, 'var(--ok)')}${seg(s.server, 'var(--srv)')}${seg(s.errors, 'var(--err)')}${seg(s.interrupted, 'var(--int)')}</svg>
       <div class="c"><div><b>${s.pct}%</b><span>выполнено</span></div></div></div>`;
   }
 
   function progressBar(s, thin) {
     const t = s.total || 1;
     const seg = k => s[k] ? `<div title="${STATUS[k].many}: ${s[k]}" style="width:${(s[k] / t) * 100}%;background:${STATUS[k].color}"></div>` : '';
-    return `<div class="progress ${thin ? 'thin' : ''}">${seg('ok')}${seg('errors')}${seg('interrupted')}</div>`;
+    return `<div class="progress ${thin ? 'thin' : ''}">${seg('ok')}${seg('server')}${seg('errors')}${seg('interrupted')}</div>`;
   }
 
   function hero(s, page, title, lead, stage) {
@@ -1796,6 +1840,7 @@ const DB = (() => {
         <div class="hero-stats">
           ${sp('ok', s.ok, 'выполнено', 'var(--ok)')}
           ${sp('errors', s.errors, 'с ошибками', 'var(--err)')}
+          ${sp('server', s.server, 'серверные проблемы', 'var(--srv)')}
           ${sp('interrupted', s.interrupted, 'прервано', 'var(--int)')}
           ${sp('pending', s.pending, 'не выполнялось', 'var(--pend)')}
           ${sp('unreviewed', s.toReview, 'ждут проверки', 'var(--rev)')}
@@ -1878,7 +1923,7 @@ const DB = (() => {
       if (f.status !== 'all') {
         if (f.status === 'issue') { if (k.reviewStatus !== 'issue') return false; }
         else if (f.status === 'reviewed') { if (k.reviewStatus !== 'ok') return false; }
-        else if (f.status === 'unreviewed') { if (!(k.status === 'ok' || k.status === 'errors') || k.reviewStatus) return false; }
+        else if (f.status === 'unreviewed') { if (!isDone(k.status) || k.reviewStatus) return false; }
         else if (f.status === 'fixed') { if (k.fix !== 'deployed') return false; }
         else if (k.status !== f.status) return false;
       }
@@ -1895,7 +1940,7 @@ const DB = (() => {
     const cnt = key => key === 'all' ? list.length
       : key === 'reviewed' ? list.filter(k => k.reviewStatus === 'ok').length
         : key === 'issue' ? list.filter(k => k.reviewStatus === 'issue').length
-          : key === 'unreviewed' ? list.filter(k => (k.status === 'ok' || k.status === 'errors') && !k.reviewStatus).length
+          : key === 'unreviewed' ? list.filter(k => isDone(k.status) && !k.reviewStatus).length
             : key === 'fixed' ? list.filter(k => k.fix === 'deployed').length
               : list.filter(k => k.status === key).length;
     const b = (key, label, col) => `<button class="${f.status === key ? 'on' : ''}" data-act="status" data-page="${page}" data-key="${key}">
@@ -1915,7 +1960,7 @@ const DB = (() => {
       </select>` : ''}
     </div>
     <div class="seg" style="margin-bottom:12px">
-      ${b('all', 'Все')}${b('pending', 'Не выполнялись', 'var(--pend)')}${list.some(k => k.status === 'partial') ? b('partial', 'Частично', 'var(--accent)') : ''}${b('interrupted', 'Прерваны', 'var(--int)')}${b('errors', 'С ошибками', 'var(--err)')}${b('ok', 'Выполнены', 'var(--ok)')}
+      ${b('all', 'Все')}${b('pending', 'Не выполнялись', 'var(--pend)')}${list.some(k => k.status === 'partial') ? b('partial', 'Частично', 'var(--accent)') : ''}${b('interrupted', 'Прерваны', 'var(--int)')}${b('errors', 'С ошибками', 'var(--err)')}${b('server', 'Серверные проблемы', 'var(--srv)')}${b('ok', 'Выполнены', 'var(--ok)')}
       ${list.some(k => k.fix === 'deployed') ? b('fixed', 'Исправлены — перепрогнать', 'var(--rev)') : ''}
       ${b('unreviewed', 'Ждут проверки', 'var(--rev)')}${b('issue', 'Замечания', 'var(--issue)')}${b('reviewed', 'Проверены', 'var(--rev)')}
       ${list.some(k => k.status === 'noinstance') ? b('noinstance', 'Нет экземпляра', 'var(--noi)') : ''}
@@ -1980,7 +2025,7 @@ const DB = (() => {
         <td class="nowrap muted" title="${k.lastRunAt ? fmtDT(k.lastRunAt, true) : ''}">${k.lastRunAt ? ago(k.lastRunAt) : '—'}</td>
         <td class="num">${k.docSec != null ? fmtSec(k.docSec) : '<span class="faint">—</span>'}</td>
         <td class="num">${k.errors ? `<span class="errn">${k.errors}</span>` : (k.status === 'ok' ? '<span class="faint">0</span>' : '<span class="faint">—</span>')}</td>
-        <td>${k.reviewStatus === 'ok' ? `<span class="pill rev">${I.check}Проверено</span>` : k.reviewStatus === 'issue' ? `<span class="pill issue" title="${esc(k.reviewComment)}">${I.flag}Замечание</span>` : (k.status === 'ok' || k.status === 'errors') ? '<span class="pill plain">ждёт</span>' : '<span class="faint">—</span>'}</td>
+        <td>${k.reviewStatus === 'ok' ? `<span class="pill rev">${I.check}Проверено</span>` : k.reviewStatus === 'issue' ? `<span class="pill issue" title="${esc(k.reviewComment)}">${I.flag}Замечание</span>` : isDone(k.status) ? '<span class="pill plain">ждёт</span>' : '<span class="faint">—</span>'}</td>
       </tr>`).join('')}</tbody>
     </table></div>
     ${bulk && S.selected.size ? `<div class="bulkbar">Выбрано: <b>${S.selected.size}</b>
@@ -2309,6 +2354,17 @@ const DB = (() => {
   }
 
   // ошибка с пометками: «не трогать», исправлено и выложено / ждёт выкладки
+  // серверная ли ошибка прогона (по srv_problems прогона: тот же алгоритм и текст)
+  function isSrvErr(e, run) {
+    const l = (run && run.srvProblems) || [];
+    return l.some(p => p.kind === 'error' && (p.alg || '') === (e.alg || '') && String(e.message || '').startsWith(p.text.slice(0, 120)));
+  }
+  function srvBlock(run) {
+    const l = (run && run.srvProblems) || [];
+    if (!l.length) return '';
+    return `<div class="srvbox"><div class="a">${I.flag}Серверные проблемы · ${l.length}<span class="faint" style="font-weight:500"> — не ошибки алгоритмов: параметры, проверка данных, подписанты, обрыв соединения</span></div>
+      ${l.map(p => `<div class="srv-line"><span class="pill small ${p.kind === 'warn' ? 'plain' : 'srvp'}">${p.kind === 'warn' ? 'предупреждение' : 'ошибка'}</span>${p.alg ? `<b>${esc(p.alg)}</b>: ` : ''}${esc(p.text)}</div>`).join('')}</div>`;
+  }
   function errBox(e, run) {
     const ign = ignored(e.alg);
     const fx = e.alg && !ign ? algFix(e.alg, run) : null;
@@ -2338,7 +2394,7 @@ const DB = (() => {
     const lastFin = finOf(docs[0] || { st: k.s1 });
     const last = k.s1.last ? full.get(k.s1.last.id) || k.s1.last : null;
     const errs1 = ((lastFin || last || {}).errors) || [];
-    const errDocs = docs.filter(d => d.st.fin && (finOf(d).errors || []).length);
+    const errDocs = docs.filter(d => d.st.fin && ((finOf(d).errors || []).length || (finOf(d).srvProblems || []).length));
     const errTotal = docs.reduce((a, d) => a + d.st.errors, 0);
     const algRun = lastFin || (errDocs[0] && finOf(errDocs[0])) || null;
     const algMap = new Map(((algRun && algRun.algs) || []).map(a => [a.name.toLowerCase(), a]));
@@ -2410,7 +2466,7 @@ const DB = (() => {
           <td class="num">${d.st.errors ? `<span class="errn">${d.st.errors}</span>` : d.st.fin ? '0' : '—'}${d.st.ignored ? ` <span class="faint" title="из них в алгоритмах «не трогать»">(${d.st.ignored} не тр.)</span>` : ''}</td></tr>`).join('')}</tbody></table></div>`
         : '<div class="empty"><div class="ico">📄</div>Нет документов</div>';
     } else if (tab === 'errors') {
-      body = errDocs.length ? errDocs.map(d => { const r = finOf(d); return `<div class="doc-h">${docLabel(d)} <span class="faint">${fmtDT(r.startAt, true)}</span></div>${(r.errors || []).map(e => errBox(e, r)).join('')}`; }).join('')
+      body = errDocs.length ? errDocs.map(d => { const r = finOf(d); return `<div class="doc-h">${docLabel(d)} <span class="faint">${fmtDT(r.startAt, true)}</span></div>${(r.errors || []).filter(e => !isSrvErr(e, r)).map(e => errBox(e, r)).join('')}${srvBlock(r)}`; }).join('')
         : '<div class="empty"><div class="ico">✅</div>Ошибок в последних прогонах нет</div>';
     } else if (tab === 'algs') {
       body = `${algRun && algRun !== lastFin ? '<div class="faint" style="margin-bottom:8px;font-size:12.5px">по документу этапа 2</div>' : ''}<div class="table-wrap"><table class="t"><thead><tr><th class="nosort">Алгоритм</th><th class="nosort num">Запусков</th><th class="nosort num">Время</th><th class="nosort" style="width:130px"></th><th class="nosort num">Макс.</th></tr></thead>
@@ -2429,9 +2485,10 @@ const DB = (() => {
       body = runs.length ? `<div class="timeline">${runs.map(r => {
         const u = up.get(r.uploadId) || {};
         const ee = effErrors({ ...r, errAlgs: r.errAlgs || (r.errors || []).map(e => e.alg || '') });
-        const stc = r.finished ? (ee.eff ? 'errors' : 'ok') : 'interrupted';
+        const nsrv = (r.srvProblems || []).length;
+        const stc = r.finished ? (ee.eff ? 'errors' : nsrv ? 'server' : 'ok') : 'interrupted';
         const st2 = r.guid && (r.guid !== k.guid || (r.ps && r.ps !== (k.ps || '')));
-        return `<div class="tl ${stc}"><div class="h"><div><b>${fmtDT(r.startAt, true)}</b> · ${r.finished ? (ee.eff ? `с ошибками (${ee.eff})` : 'выполнен') : 'прерван'}${r.total ? ` <span class="faint">· документ ${r.idx} из ${r.total}</span>` : ''}${st2 ? ` <span class="stage-chip">этап 2</span> <span class="faint mono" style="font-size:11.5px">${esc(shortGuid(r.guid))}${r.ps ? ' · ' + esc(psLabel(r.ps)) : ''}</span>` : ''}</div><div class="nowrap"><b>${fmtSec(docSec(r))}</b></div></div>
+        return `<div class="tl ${stc}"><div class="h"><div><b>${fmtDT(r.startAt, true)}</b> · ${r.finished ? (ee.eff ? `с ошибками (${ee.eff})${nsrv ? `, серверных проблем: ${nsrv}` : ''}` : nsrv ? `серверные проблемы (${nsrv})` : 'выполнен') : 'прерван'}${r.total ? ` <span class="faint">· документ ${r.idx} из ${r.total}</span>` : ''}${st2 ? ` <span class="stage-chip">этап 2</span> <span class="faint mono" style="font-size:11.5px">${esc(shortGuid(r.guid))}${r.ps ? ' · ' + esc(psLabel(r.ps)) : ''}</span>` : ''}</div><div class="nowrap"><b>${fmtSec(docSec(r))}</b></div></div>
           <div class="faint" style="font-size:12.5px">${esc(u.fileName || '')} · загрузил(а) ${esc(userName(u.by))} ${ago(u.at)}${r.match === 'auto' ? ' · вид определён по алгоритмам' : r.match === 'manual' || r.match === 'hint' ? ' · вид указан вручную' : ''}</div></div>`;
       }).join('')}</div>` : '<div class="empty"><div class="ico">⏳</div>Прогонов ещё не было</div>';
     }
@@ -2654,7 +2711,7 @@ const DB = (() => {
           : `<div style="display:flex;gap:6px;flex-wrap:wrap"><input class="input" list="kindCodes" placeholder="Код вида" style="width:180px" data-attr-input="${r.id}" value="${esc(r.candidates[0] || '')}">
             <button class="btn small primary" data-act="attribute" data-upload="${u.id}" data-run="${r.id}">Отнести</button></div>
             ${r.candidates.length ? `<div class="sub-line" style="max-width:360px">Похожие по алгоритмам: ${r.candidates.slice(0, 4).map(esc).join(', ')}</div>` : ''}`}</td>
-        <td>${pill(r.finished ? (ee.eff ? 'errors' : 'ok') : 'interrupted')}</td>
+        <td>${pill(r.finished ? (ee.eff ? 'errors' : (r.srvProblems || []).length ? 'server' : 'ok') : 'interrupted')}</td>
         <td class="num">${fmtSec(docSec(r))}</td><td class="num">${ee.eff ? `<span class="errn">${ee.eff}</span>` : 0}${ee.ign ? ` <span class="faint" title="из них в алгоритмах «не трогать»">(${ee.ign} не тр.)</span>` : ''}</td></tr>`; }).join('')}</tbody></table></div>`,
       '<button class="btn" data-act="closeModal">Закрыть</button>');
   }
