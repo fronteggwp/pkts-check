@@ -2081,6 +2081,8 @@ const DB = (() => {
           <button class="btn primary" data-act="dlAllPendFix" data-st="${f.stage}" ${pf.all.length ? '' : 'disabled'}
             title="Документы, которые ещё не выполнялись, и документы с ошибками, исправление которых уже выложено на сервер, а последний прогон шёл меньше 5 минут">${I.dl}JSON: не выполнялись + исправленные (${pf.all.length})</button>
           <span class="muted">не выполнялись: ${pf.pending.length} · с ошибками, исправлены и выложены, прогон &lt; 5 мин: ${pf.fixed.length}</span>
+          ${(() => { const fx = docsOfKinds(scope, f.stage).filter(d => d.st.status === 'errors' && d.st.fix === 'deployed');
+            return `<button class="btn" data-act="dlAllFixed" data-st="${f.stage}" ${fx.length ? '' : 'disabled'} title="Все документы с нашими ошибками, исправление которых уже выложено на сервер — без ограничения по времени прогона">${I.rerun}JSON: все исправленные с ошибками (${fx.length})</button>`; })()}
           <button class="btn smart-btn" style="margin-left:auto" data-act="smart" data-all="1" data-login="${esc(S.me.login)}" data-st="${f.stage}" title="Видов на странице: все с ошибками, не выполнявшиеся, прерванные, медленные и оптимизированные — от быстрых к медленным, тяжёлые в конце"><span class="spark">✦</span>Умная выгрузка JSON<span class="smart-tag">все виды</span></button>
         </div>`;
       })()}
@@ -2923,6 +2925,13 @@ const DB = (() => {
         const pd = perfDocs(t.dataset.login, st);
         if (!pd.ready.length) { toast('Пока нечего перепроверять: оптимизированные алгоритмы ещё не выложены', true); break; }
         await downloadBatch(t.dataset.login, st, pd.ready, 'оптимизированные');
+        break;
+      }
+      case 'dlAllFixed': {
+        const st = +t.dataset.st || 1;
+        const fx = docsOfKinds(scopeAll(), st).filter(d => d.st.status === 'errors' && d.st.fix === 'deployed');
+        if (!fx.length) { toast('Нечего запускать: исправленных и выложенных документов с ошибками нет'); break; }
+        await downloadBatch(S.f.all.who, st, fx, 'исправленные_с_ошибками');
         break;
       }
       case 'dlAllPendFix': {
