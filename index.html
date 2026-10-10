@@ -503,6 +503,8 @@ td.small { font-size: 12.5px; }
 .srv-line:first-of-type { border-top: 0; }
 .tabs .n.srv { background: var(--srv-soft); color: var(--srv); margin-left: 4px; }
 .srvn { display: inline-block; margin-left: 6px; min-width: 20px; padding: 1px 6px; border-radius: 999px; background: var(--srv-soft); color: var(--srv); font-weight: 700; font-size: 12px; text-align: center; }
+.sm-chip.err, .sm-pill.err { background: var(--err-soft); color: var(--err); border-color: transparent; }
+.sm-chip.slow, .sm-pill.slow { background: var(--issue-soft, var(--surface-3)); color: var(--issue); border-color: transparent; }
 
 </style>
 </head>
@@ -1489,7 +1491,7 @@ const DB = (() => {
   // от быстрых к медленным по оценке времени; тяжёлые (прерывались, ≥30 мин, уровень ПАО от 10 мин) — хвостом в конце.
   // Сервер выполняет группы JSON строго по порядку (повторять группу тип+набор можно), поэтому порядок документов сохраняется.
   const SMART_HEAVY_SEC = 1800;
-  const SMART_CAT = { fixed: 'исправлены ошибки', perf: 'оптимизация', new: 'не проверялся', cut: 'прерывался' };
+  const SMART_CAT = { fixed: 'исправлены ошибки', err: 'с ошибками', perf: 'оптимизация', slow: 'медленный', new: 'не проверялся', cut: 'прерывался' };
   let smartAlgStats = null;   // алгоритм -> медиана времени (maxSec) по прогонам; семейство (до первой точки) -> медиана
   async function loadAlgStats() {
     if (smartAlgStats && smartAlgStats.n === S.runs.length) return smartAlgStats;
@@ -1531,22 +1533,25 @@ const DB = (() => {
     if (t.length) return { sec: Math.max(Math.max(...t), t.reduce((a, b) => a + b, 0) / Math.min(4, t.length)), src: approx ? 'по похожим алгоритмам' : 'по алгоритмам' };
     return { sec: typeMedianSec(d.doctype, k && k.category), src: 'по типу документа' };
   }
-  function smartDocs(login, stage, stats) {
+  // all — «Все виды»: ещё и все документы с нашими ошибками (исправленные или нет) и медленные (от 5 мин)
+  function smartDocs(login, stage, stats, all) {
     const kindBy = new Map(S.kinds.map(k => [k.code, k]));
     const out = [];
-    for (const d of docsOf(login, stage)) {
+    for (const d of (all ? docsOfKinds(scopeAll(), stage) : docsOf(login, stage))) {
       const st = d.st;
       const cat = st.status === 'pending' ? 'new'
         : st.status === 'interrupted' ? 'cut'
         : st.status === 'errors' && st.fix === 'deployed' ? 'fixed'
-        : isDone(st.status) && st.perf === 'deployed' ? 'perf' : null;
+        : all && st.status === 'errors' ? 'err'
+        : isDone(st.status) && st.perf === 'deployed' ? 'perf'
+        : all && isDone(st.status) && st.sec != null && st.sec >= SLOW_SEC ? 'slow' : null;
       if (!cat) continue;
       const k = kindBy.get(d.kind);
       const e = estimateDoc(d, k, stats, stage);
       const heavy = cat === 'cut' || (e.sec != null && e.sec >= SMART_HEAVY_SEC) || (/ПАО/.test(d.kind) && (e.sec == null || e.sec >= 600));
       out.push({ ...d, cat, est: e.sec, src: e.src, atLeast: !!e.atLeast, heavy, name: k ? k.name : '' });
     }
-    const rank = { fixed: 0, perf: 1, new: 2, cut: 3 };
+    const rank = { fixed: 0, err: 1, perf: 2, slow: 3, new: 4, cut: 5 };
     const key = x => x.est == null ? Infinity : x.est;
     return out.sort((a, b) => (a.heavy - b.heavy) || key(a) - key(b) || rank[a.cat] - rank[b.cat] || (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0));
   }
@@ -1583,7 +1588,7 @@ const DB = (() => {
     if (cur.length) parts.push(cur);
     return { visible, list, parts };
   }
-  const SMART_PILL = { fixed: 'ok', perf: 'rev', new: 'new', cut: 'cut' };
+  const SMART_PILL = { fixed: 'ok', err: 'err', perf: 'rev', slow: 'slow', new: 'new', cut: 'cut' };
   function renderSmart() {
     const sm = S.smart;
     const { visible, list, parts } = smartSelection();
@@ -1608,13 +1613,8 @@ const DB = (() => {
         <td class="muted small">${esc(x.src)}</td></tr>`;
     }).join('');
     $('#smartBody').innerHTML = `
-      <div class="sm-chips">
-        <span class="sm-chip ok"><b>${cnt('fixed')}</b> исправлены ошибки</span>
-        <span class="sm-chip rev"><b>${cnt('perf')}</b> оптимизация</span>
-        <span class="sm-chip new"><b>${cnt('new')}</b> не проверялись</span>
-        <span class="sm-chip cut"><b>${cnt('cut')}</b> прерывались</span>
-      </div>
-      <div class="why" style="margin:2px 0 12px">Порядок — от быстрых к медленным по оценке времени. Исправления и оптимизации — только уже выложенные на сервер. Снимите галочку, чтобы убрать документ из прогона.</div>
+      <div class="sm-chips">${['fixed', 'err', 'perf', 'slow', 'new', 'cut'].filter(c => cnt(c) || ['fixed', 'perf', 'new', 'cut'].includes(c)).map(c => `<span class="sm-chip ${SMART_PILL[c]}"><b>${cnt(c)}</b> ${SMART_CAT[c]}</span>`).join('')}</div>
+      <div class="why" style="margin:2px 0 12px">Порядок — от быстрых к медленным по оценке времени. «Исправлены» и «оптимизация» — только уже выложенные на сервер${sm.all ? '; «с ошибками» — все остальные документы с нашими ошибками, «медленный» — прогон от 5 мин' : ''}. Снимите галочку, чтобы убрать документ из прогона.</div>
       <div class="sm-opts">
         <label class="sm-opt"><input type="checkbox" data-act="smartOpt" data-k="heavy" ${sm.heavy ? 'checked' : ''}> тяжёлые в конце <span class="muted">(${nHeavy})</span></label>
         <label class="sm-opt">не брать дольше <select class="input sm-sel" data-act="smartOpt" data-k="limit">${opt(0, sm.limit, 'без ограничения')}${opt(10, sm.limit, '10 мин')}${opt(30, sm.limit, '30 мин')}${opt(60, sm.limit, '60 мин')}</select></label>
@@ -1629,12 +1629,12 @@ const DB = (() => {
     const btn = $('#smartDl');
     if (btn) { btn.disabled = !list.length; btn.innerHTML = `${I.dl}${parts.length > 1 ? `Скачать ${parts.length} ${plural(parts.length, 'файл', 'файла', 'файлов')}` : 'Скачать JSON'}`; }
   }
-  async function openSmart(login, stage) {
+  async function openSmart(login, stage, all) {
     toast('Считаю оценки времени…');
     const stats = await loadAlgStats();
-    const list = smartDocs(login, stage, stats);
+    const list = smartDocs(login, stage, stats, all);
     if (!list.length) { toast('Нечего выгружать: не проверявшихся, исправленных и оптимизированных (выложенных) документов нет'); return; }
-    S.smart = { login, stage, list, heavy: true, limit: 0, split: 0, off: new Set() };
+    S.smart = { login, stage, list, all, heavy: true, limit: 0, split: 0, off: new Set() };
     modal('Умная выгрузка JSON', '<div id="smartBody"></div>',
       `<div id="smartInfo" class="sm-info"></div><button class="btn" data-act="closeModal">Закрыть</button><button class="btn primary" id="smartDl" data-act="smartDl">Скачать JSON</button>`);
     $('.modal').classList.add('wide');
@@ -1644,7 +1644,7 @@ const DB = (() => {
     const sm = S.smart;
     const { parts } = smartSelection();
     if (!parts.length) { toast('Ничего не выбрано'); return; }
-    const who = userName(sm.login);
+    const who = sm.all ? (S.f.all.who === 'all' ? 'все' : S.f.all.who === 'none' ? 'без_исполнителя' : userName(S.f.all.who)) : userName(sm.login);
     for (let i = 0; i < parts.length; i++) {
       const b = buildBatchOrdered(parts[i]);
       downloadText(`перепроверка_${who}${sm.stage === 2 ? '_этап2' : ''}_умная${parts.length > 1 ? `_${i + 1}из${parts.length}` : ''}_${stamp()}.txt`, b.text);
@@ -2081,6 +2081,7 @@ const DB = (() => {
           <button class="btn primary" data-act="dlAllPendFix" data-st="${f.stage}" ${pf.all.length ? '' : 'disabled'}
             title="Документы, которые ещё не выполнялись, и документы с ошибками, исправление которых уже выложено на сервер, а последний прогон шёл меньше 5 минут">${I.dl}JSON: не выполнялись + исправленные (${pf.all.length})</button>
           <span class="muted">не выполнялись: ${pf.pending.length} · с ошибками, исправлены и выложены, прогон &lt; 5 мин: ${pf.fixed.length}</span>
+          <button class="btn smart-btn" style="margin-left:auto" data-act="smart" data-all="1" data-login="${esc(S.me.login)}" data-st="${f.stage}" title="Видов на странице: все с ошибками, не выполнявшиеся, прерванные, медленные и оптимизированные — от быстрых к медленным, тяжёлые в конце"><span class="spark">✦</span>Умная выгрузка JSON<span class="smart-tag">все виды</span></button>
         </div>`;
       })()}
       ${toolbar('all', scope)}
@@ -2931,7 +2932,7 @@ const DB = (() => {
         await downloadBatch(S.f.all.who, st, pf.all, 'не_выполнялись_и_исправленные');
         break;
       }
-      case 'smart': await safe(() => openSmart(t.dataset.login, +t.dataset.st || 1)); break;
+      case 'smart': await safe(() => openSmart(t.dataset.login, +t.dataset.st || 1, t.dataset.all === '1')); break;
       case 'smartDl': await downloadSmart(); break;
       case 'smartPick': {
         if (!S.smart) break;
