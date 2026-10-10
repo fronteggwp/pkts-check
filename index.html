@@ -1478,9 +1478,9 @@ const DB = (() => {
     const text = JSON.stringify({ documents: groups.map(g => ({ doctype: g.doctype, ids: g.ids, paramValueSetCode: g.ps || 'BatchRun' })) }, null, 4).replace(/\n/g, '\r\n') + '\r\n';
     return { text, items: list.map(d => [d.doctype, d.guid, d.ps || '']), count: list.length };
   }
-  async function downloadBatch(login, stage, docs, suffix) {
+  async function downloadBatch(login, stage, docs, suffix, ordered) {
     if (!docs.length) { toast('Нечего запускать'); return; }
-    const b = buildBatch(docs);
+    const b = ordered ? buildBatchOrdered(docs) : buildBatch(docs);
     downloadText(`перепроверка_${login === 'all' ? 'все' : login === 'none' ? 'без_исполнителя' : userName(login)}${stage === 2 ? '_этап2' : ''}${suffix ? '_' + suffix : ''}_${stamp()}.txt`, b.text);
     toast(`Скачан JSON: ${b.count} ${plural(b.count, 'документ', 'документа', 'документов')}`);
     // порядок пакета запоминается: по номеру N/M в протоколе потом определяется набор параметров
@@ -1554,6 +1554,18 @@ const DB = (() => {
     const rank = { fixed: 0, err: 1, perf: 2, slow: 3, new: 4, cut: 5 };
     const key = x => x.est == null ? Infinity : x.est;
     return out.sort((a, b) => (a.heavy - b.heavy) || key(a) - key(b) || rank[a.cat] - rank[b.cat] || (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0));
+  }
+  // документы по оценке времени: от быстрых к медленным, тяжёлые (≥ 30 мин, прерывались, ПАО от 10 мин) — в конце (как в умной выгрузке)
+  async function orderByEstimate(docs, stage) {
+    const stats = await loadAlgStats();
+    const kindBy = new Map(S.kinds.map(k => [k.code, k]));
+    const key = x => x.est == null ? Infinity : x.est;
+    return docs.map(d => {
+      const k = kindBy.get(d.kind);
+      const e = estimateDoc(d, k, stats, stage);
+      const heavy = d.st.status === 'interrupted' || (e.sec != null && e.sec >= SMART_HEAVY_SEC) || (/ПАО/.test(d.kind) && (e.sec == null || e.sec >= 600));
+      return { ...d, est: e.sec, heavy };
+    }).sort((a, b) => (a.heavy - b.heavy) || key(a) - key(b) || (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0));
   }
   // JSON с сохранением порядка: новая группа — когда меняется тип документа или набор; соседние одинаковые склеиваются
   function buildBatchOrdered(docs) {
@@ -2082,7 +2094,7 @@ const DB = (() => {
             title="Документы, которые ещё не выполнялись, и документы с ошибками, исправление которых уже выложено на сервер, а последний прогон шёл меньше 5 минут">${I.dl}JSON: не выполнялись + исправленные (${pf.all.length})</button>
           <span class="muted">не выполнялись: ${pf.pending.length} · с ошибками, исправлены и выложены, прогон &lt; 5 мин: ${pf.fixed.length}</span>
           ${(() => { const fx = docsOfKinds(scope, f.stage).filter(d => d.st.status === 'errors' && d.st.fix === 'deployed');
-            return `<button class="btn" data-act="dlAllFixed" data-st="${f.stage}" ${fx.length ? '' : 'disabled'} title="Все документы с нашими ошибками, исправление которых уже выложено на сервер — без ограничения по времени прогона">${I.rerun}JSON: все исправленные с ошибками (${fx.length})</button>`; })()}
+            return `<button class="btn" data-act="dlAllFixed" data-st="${f.stage}" ${fx.length ? '' : 'disabled'} title="Все документы с нашими ошибками, исправление которых уже выложено на сервер — без ограничения по времени прогона; порядок — от быстрых к долгим, тяжёлые в конце">${I.rerun}JSON: все исправленные с ошибками (${fx.length})</button>`; })()}
           <button class="btn smart-btn" style="margin-left:auto" data-act="smart" data-all="1" data-login="${esc(S.me.login)}" data-st="${f.stage}" title="Видов на странице: все с ошибками, не выполнявшиеся, прерванные, медленные и оптимизированные — от быстрых к медленным, тяжёлые в конце"><span class="spark">✦</span>Умная выгрузка JSON<span class="smart-tag">все виды</span></button>
         </div>`;
       })()}
@@ -2931,7 +2943,7 @@ const DB = (() => {
         const st = +t.dataset.st || 1;
         const fx = docsOfKinds(scopeAll(), st).filter(d => d.st.status === 'errors' && d.st.fix === 'deployed');
         if (!fx.length) { toast('Нечего запускать: исправленных и выложенных документов с ошибками нет'); break; }
-        await downloadBatch(S.f.all.who, st, fx, 'исправленные_с_ошибками');
+        await downloadBatch(S.f.all.who, st, await orderByEstimate(fx, st), 'исправленные_с_ошибками', true);   // от быстрых к долгим
         break;
       }
       case 'dlAllPendFix': {
