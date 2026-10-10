@@ -546,7 +546,7 @@ const LogParser = (() => {
     if (/57P01|57014/.test(m + ' ' + (details || '')) && !/Connection refused|Exception while reading from stream/.test(m)) return false;
     if (/terminating connection|transient failure|Connection refused|Exception while reading from stream/.test(m)) return true;
     if (/несуществующей колонке/.test(m)) return true;
-    if (/^Внимание|Ошибки заполнения параметров|Не удалось выполнить алгоритм проверки значений|не скомпилирован|Не получилось найти сборку|подписант|должно быть|Заполните/i.test(m)) return true;
+    if (/^Внимание|Ошибки заполнения параметров|Не удалось выполнить алгоритм проверки значений|не скомпилирован|Не получилось найти сборку|Ошибка при получении значения|подписант|должно быть|Заполните/i.test(m)) return true;
     if (/^Не (задан|указан|заполнен|выбран|введен)/i.test(m)) return true;
     if (/(_Param|Валидация\w*|ПроверкаПараметров\w*|ВходныеПараметрыОтчета|ParamCheck|_00_Param)$/.test(alg || '')) return true;
     return SRV_PARAM.test(m) && !SRV_NOT_PARAM.test(m);
