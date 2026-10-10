@@ -501,6 +501,8 @@ td.small { font-size: 12.5px; }
 .srvbox .a { display: flex; align-items: center; gap: 6px; font-weight: 700; color: var(--srv); margin-bottom: 6px; flex-wrap: wrap; }
 .srv-line { font-size: 13px; padding: 4px 0; border-top: 1px dashed color-mix(in srgb, var(--srv) 25%, transparent); display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .srv-line:first-of-type { border-top: 0; }
+.tabs .n.srv { background: var(--srv-soft); color: var(--srv); margin-left: 4px; }
+.srvn { display: inline-block; margin-left: 6px; min-width: 20px; padding: 1px 6px; border-radius: 999px; background: var(--srv-soft); color: var(--srv); font-weight: 700; font-size: 12px; text-align: center; }
 
 </style>
 </head>
@@ -578,7 +580,7 @@ const LogParser = (() => {
     const shiftHours = opts && opts.shiftHours != null ? +opts.shiftHours : 3;
     const links = opts && opts.links;
     const res = { operations: [], batch: false, summary: null, from: null, to: null, docs: [] };
-    let cur = null, batchOp = false, lastErr = null;
+    let cur = null, batchOp = false, lastErr = null, lastWarn = null;
     const secsBetween = (a, b) => (new Date(b) - new Date(a)) / 1000;
 
     function close(finished, end) {
@@ -615,9 +617,12 @@ const LogParser = (() => {
       const m = RX.line.exec(line);
       if (!m) {
         if (lastErr && lastErr.details.length < 6000 && line.length) lastErr.details += (lastErr.details ? '\n' : '') + line;
+        // продолжение предупреждения о параметрах (список незаданных параметров идёт следующими строками)
+        else if (lastWarn && cur && line.trim() && cur.doc.srvWarns[lastWarn.i].length < 900) cur.doc.srvWarns[lastWarn.i] += '\n' + line.trim();
         continue;
       }
       lastErr = null;
+      lastWarn = null;
       const ts = stamp(m, shiftHours);
       const type = m[7], msg = m[8];
       if (!res.from) res.from = ts;
@@ -679,7 +684,10 @@ const LogParser = (() => {
         else addError(null, msg, ts);
         continue;
       }
-      if (type === 'Warning') { cur.doc.warnings++; if (srvWarn(msg) && cur.doc.srvWarns.length < 50) cur.doc.srvWarns.push(msg.slice(0, 300)); }
+      if (type === 'Warning') {
+        cur.doc.warnings++;
+        if (srvWarn(msg) && cur.doc.srvWarns.length < 50) { cur.doc.srvWarns.push(msg.slice(0, 300)); lastWarn = { i: cur.doc.srvWarns.length - 1 }; }
+      }
     }
     close(false, null);
     for (const d of res.docs) d.algs.forEach(a => { a.totalSec = Math.round(a.totalSec * 1000) / 1000; a.maxSec = Math.round(a.maxSec * 1000) / 1000; });
@@ -724,7 +732,7 @@ const DB = (() => {
   // наши ошибки и серверные проблемы (не задан параметр, проверка данных, подписанты, обрыв соединения…) — по LogParser.srvError/srvWarn
   const srvError = (alg, msg, details) => typeof LogParser !== 'undefined' && LogParser.srvError ? LogParser.srvError(alg, msg, details) : false;
   const ownErrAlgsOf = errors => (errors || []).filter(e => !srvError(e.alg, e.message, e.details)).map(e => e.alg || '');
-  const srvProblemsOf = r => (r.errors || []).filter(e => srvError(e.alg, e.message, e.details)).map(e => ({ alg: e.alg || '', text: String(e.message || '').slice(0, 300), kind: 'error' }))
+  const srvProblemsOf = r => (r.errors || []).filter(e => srvError(e.alg, e.message, e.details)).map(e => ({ alg: e.alg || '', text: String(e.message || '').slice(0, 900), kind: 'error' }))
     .concat((r.srvWarns || []).map(t => ({ alg: '', text: t, kind: 'warn' })));
   const runFromRow = r => ({
     id: r.id, uploadId: r.upload_id, pos: r.pos, guid: r.guid, doctype: r.doctype, idx: r.idx, total: r.total,
@@ -2024,7 +2032,7 @@ const DB = (() => {
         <td class="num muted">${stage === 2 ? k.progress.total : k.algCount}</td>
         <td class="nowrap muted" title="${k.lastRunAt ? fmtDT(k.lastRunAt, true) : ''}">${k.lastRunAt ? ago(k.lastRunAt) : '—'}</td>
         <td class="num">${k.docSec != null ? fmtSec(k.docSec) : '<span class="faint">—</span>'}</td>
-        <td class="num">${k.errors ? `<span class="errn">${k.errors}</span>` : (k.status === 'ok' ? '<span class="faint">0</span>' : '<span class="faint">—</span>')}</td>
+        <td class="num">${k.errors ? `<span class="errn">${k.errors}</span>` : (k.status === 'ok' || k.status === 'server' ? '<span class="faint">0</span>' : '<span class="faint">—</span>')}${k.srv ? ` <span class="srvn" title="серверные проблемы: параметры, проверка данных, подписанты, обрыв">${k.srv}</span>` : ''}</td>
         <td>${k.reviewStatus === 'ok' ? `<span class="pill rev">${I.check}Проверено</span>` : k.reviewStatus === 'issue' ? `<span class="pill issue" title="${esc(k.reviewComment)}">${I.flag}Замечание</span>` : isDone(k.status) ? '<span class="pill plain">ждёт</span>' : '<span class="faint">—</span>'}</td>
       </tr>`).join('')}</tbody>
     </table></div>
@@ -2363,7 +2371,7 @@ const DB = (() => {
     const l = (run && run.srvProblems) || [];
     if (!l.length) return '';
     return `<div class="srvbox"><div class="a">${I.flag}Серверные проблемы · ${l.length}<span class="faint" style="font-weight:500"> — не ошибки алгоритмов: параметры, проверка данных, подписанты, обрыв соединения</span></div>
-      ${l.map(p => `<div class="srv-line"><span class="pill small ${p.kind === 'warn' ? 'plain' : 'srvp'}">${p.kind === 'warn' ? 'предупреждение' : 'ошибка'}</span>${p.alg ? `<b>${esc(p.alg)}</b>: ` : ''}${esc(p.text)}</div>`).join('')}</div>`;
+      ${l.map(p => `<div class="srv-line"><span class="pill small ${p.kind === 'warn' ? 'plain' : 'srvp'}">${p.kind === 'warn' ? 'предупреждение' : 'ошибка'}</span>${p.alg ? `<b>${esc(p.alg)}</b>: ` : ''}<span style="white-space:pre-line">${esc(p.text)}</span></div>`).join('')}</div>`;
   }
   function errBox(e, run) {
     const ign = ignored(e.alg);
@@ -2396,6 +2404,7 @@ const DB = (() => {
     const errs1 = ((lastFin || last || {}).errors) || [];
     const errDocs = docs.filter(d => d.st.fin && ((finOf(d).errors || []).length || (finOf(d).srvProblems || []).length));
     const errTotal = docs.reduce((a, d) => a + d.st.errors, 0);
+    const srvTotal = docs.reduce((a, d) => a + (d.st.srv || 0), 0);
     const algRun = lastFin || (errDocs[0] && finOf(errDocs[0])) || null;
     const algMap = new Map(((algRun && algRun.algs) || []).map(a => [a.name.toLowerCase(), a]));
     const own = k.algorithms.concat((k.linkAlgs || []).filter(a => !k.algorithms.some(b => b.toLowerCase() === a.toLowerCase())));
@@ -2407,7 +2416,7 @@ const DB = (() => {
     const notRan = algs.filter(a => a.inKind && !a.ran && !LogParser.isLink(S.links, a.name)).length;
     const pos = S.nav.indexOf(k.code);
     const tab = S.tab;
-    const tb = (id, label, n, err) => `<button class="${tab === id ? 'on' : ''}" data-act="tab" data-tab="${id}">${label}${n != null ? `<span class="n ${err && n ? 'err' : ''}">${n}</span>` : ''}</button>`;
+    const tb = (id, label, n, err, srv) => `<button class="${tab === id ? 'on' : ''}" data-act="tab" data-tab="${id}">${label}${n != null ? `<span class="n ${err && n ? 'err' : ''}">${n}</span>` : ''}${srv ? `<span class="n srv" title="серверные проблемы">${srv}</span>` : ''}</button>`;
     const docLabel = d => `${d.stage === 2 ? '<span class="stage-chip">этап 2</span>' : '<span class="pill plain small">этап 1</span>'} <span class="mono copy" data-act="copy" data-text="${esc(d.guid || '')}" title="Скопировать GUID">${esc(d.guid || 'без GUID')}</span>${d.ps ? ` <span class="pill plain small">${esc(psLabel(d.ps))}</span>` : ''}`;
     const rv = stage === 2 ? { st: k.review2Status, c: k.review2Comment, by: k.review2By, at: k.review2At } : { st: k.reviewStatus, c: k.reviewComment, by: k.reviewBy, at: k.reviewAt };
     let body = '';
@@ -2439,10 +2448,12 @@ const DB = (() => {
             <div class="mg"><div class="l">Когда</div><div class="v">${fmtDT(last.startAt, true)}</div></div>
             <div class="mg"><div class="l">Время документа</div><div class="v">${fmtSec(docSec(lastFin || last))}</div></div>
             <div class="mg"><div class="l">Ошибок</div><div class="v" style="color:${k.errors ? 'var(--err)' : 'inherit'}">${k.errors}${k.ignored ? ` <span class="faint" style="font-weight:500">из них ${k.ignored} в «не трогать»</span>` : ''}</div></div>
+            <div class="mg"><div class="l">Серверные проблемы</div><div class="v" style="color:${(lastFin || last).srvProblems && (lastFin || last).srvProblems.length ? 'var(--srv)' : 'inherit'}">${((lastFin || last).srvProblems || []).length}</div></div>
             <div class="mg"><div class="l">Алгоритмов отработало</div><div class="v">${algs.filter(x => x.ran).length} из ${own.length}${notRan && lastFin ? ` <span class="faint" style="font-weight:500">(не запускались ${notRan})</span>` : ''}</div></div>
           </div>
           ${!lastFin && last.running && last.running.length ? `<div class="errbox warn" style="margin-top:12px"><div class="a" style="color:var(--int);font-family:var(--font)">Протокол оборвался во время выполнения:</div><div class="mono" style="margin-top:4px">${last.running.map(esc).join('<br>')}</div></div>` : ''}
-          ${errs1.length ? `<div class="section"><h4>Ошибки</h4>${errs1.slice(0, 3).map(e => errBox(e, lastFin || last)).join('')}${errs1.length > 3 || errDocs.length > 1 ? `<button class="btn small" data-act="tab" data-tab="errors">Все ошибки (${errTotal})</button>` : ''}</div>` : ''}`
+          ${(() => { const r1 = lastFin || last; const own1 = errs1.filter(e => !isSrvErr(e, r1)); const srvB = srvBlock(r1);
+            return (own1.length || srvB) ? `<div class="section"><h4>Ошибки</h4>${own1.slice(0, 3).map(e => errBox(e, r1)).join('')}${srvB}${own1.length > 3 || errDocs.length > 1 ? `<button class="btn small" data-act="tab" data-tab="errors">Все ошибки и серверные проблемы (${errTotal}${srvTotal ? ' + ' + srvTotal : ''})</button>` : ''}</div>` : ''; })()}`
         : `<div class="empty" style="padding:24px"><div class="ico">⏳</div>Протоколов по этому виду ещё не загружали</div>`}
         </div>
         <div class="section"><h4>Протокол одиночного запуска</h4>
@@ -2463,11 +2474,11 @@ const DB = (() => {
           <td>${pill(d.st.last ? d.st.status : (d.guid ? 'pending' : 'noinstance'))}${d.st.fix === 'deployed' ? '<div class="sub-line" style="color:var(--rev)">исправлено — перепрогнать</div>' : d.st.fix === 'pending' ? '<div class="sub-line" style="color:var(--int)">ждёт выкладки</div>' : ''}</td>
           <td class="nowrap muted">${d.st.lastRunAt ? fmtDT(d.st.lastRunAt) : '—'}</td>
           <td class="num">${fmtSec(d.st.sec)}</td>
-          <td class="num">${d.st.errors ? `<span class="errn">${d.st.errors}</span>` : d.st.fin ? '0' : '—'}${d.st.ignored ? ` <span class="faint" title="из них в алгоритмах «не трогать»">(${d.st.ignored} не тр.)</span>` : ''}</td></tr>`).join('')}</tbody></table></div>`
+          <td class="num">${d.st.errors ? `<span class="errn">${d.st.errors}</span>` : d.st.fin ? '0' : '—'}${d.st.srv ? ` <span class="srvn" title="серверные проблемы: параметры, проверка данных, подписанты, обрыв">${d.st.srv}</span>` : ''}${d.st.ignored ? ` <span class="faint" title="из них в алгоритмах «не трогать»">(${d.st.ignored} не тр.)</span>` : ''}</td></tr>`).join('')}</tbody></table></div>`
         : '<div class="empty"><div class="ico">📄</div>Нет документов</div>';
     } else if (tab === 'errors') {
       body = errDocs.length ? errDocs.map(d => { const r = finOf(d); return `<div class="doc-h">${docLabel(d)} <span class="faint">${fmtDT(r.startAt, true)}</span></div>${(r.errors || []).filter(e => !isSrvErr(e, r)).map(e => errBox(e, r)).join('')}${srvBlock(r)}`; }).join('')
-        : '<div class="empty"><div class="ico">✅</div>Ошибок в последних прогонах нет</div>';
+        : '<div class="empty"><div class="ico">✅</div>Ошибок и серверных проблем в последних прогонах нет</div>';
     } else if (tab === 'algs') {
       body = `${algRun && algRun !== lastFin ? '<div class="faint" style="margin-bottom:8px;font-size:12.5px">по документу этапа 2</div>' : ''}<div class="table-wrap"><table class="t"><thead><tr><th class="nosort">Алгоритм</th><th class="nosort num">Запусков</th><th class="nosort num">Время</th><th class="nosort" style="width:130px"></th><th class="nosort num">Макс.</th></tr></thead>
         <tbody>${algs.map(a => { const vi = verInfo(a.name); return `<tr style="cursor:default">
@@ -2508,7 +2519,7 @@ const DB = (() => {
           <span>${typeRu(k.doctype, k.category)}</span><span>${who(k.assignee)}</span><span>${k.algCount} ${plural(k.algCount, 'алгоритм', 'алгоритма', 'алгоритмов')}${k.linkAlgs && k.linkAlgs.length ? ` + связи` : ''}</span>
           ${k.guid ? `<span class="copy mono" data-act="copy" data-text="${esc(k.guid)}" title="Скопировать GUID">${esc(k.guid)}</span>` : '<span class="faint">нет экземпляра документа</span>'}
         </div>
-        <div class="tabs">${tb('overview', 'Обзор')}${k.docs2.length ? tb('docs', 'Документы', docs.length) : ''}${tb('errors', 'Ошибки', errTotal, true)}${tb('algs', 'Алгоритмы', algs.length)}${tb('history', 'История', runs.length)}</div>
+        <div class="tabs">${tb('overview', 'Обзор')}${k.docs2.length ? tb('docs', 'Документы', docs.length) : ''}${tb('errors', 'Ошибки', errTotal, true, srvTotal)}${tb('algs', 'Алгоритмы', algs.length)}${tb('history', 'История', runs.length)}</div>
       </div>
       <div class="drawer-body">${body}</div>
     </aside>`;
@@ -2712,7 +2723,7 @@ const DB = (() => {
             <button class="btn small primary" data-act="attribute" data-upload="${u.id}" data-run="${r.id}">Отнести</button></div>
             ${r.candidates.length ? `<div class="sub-line" style="max-width:360px">Похожие по алгоритмам: ${r.candidates.slice(0, 4).map(esc).join(', ')}</div>` : ''}`}</td>
         <td>${pill(r.finished ? (ee.eff ? 'errors' : (r.srvProblems || []).length ? 'server' : 'ok') : 'interrupted')}</td>
-        <td class="num">${fmtSec(docSec(r))}</td><td class="num">${ee.eff ? `<span class="errn">${ee.eff}</span>` : 0}${ee.ign ? ` <span class="faint" title="из них в алгоритмах «не трогать»">(${ee.ign} не тр.)</span>` : ''}</td></tr>`; }).join('')}</tbody></table></div>`,
+        <td class="num">${fmtSec(docSec(r))}</td><td class="num">${ee.eff ? `<span class="errn">${ee.eff}</span>` : 0}${(r.srvProblems || []).length ? ` <span class="srvn" title="серверные проблемы: параметры, проверка данных, подписанты, обрыв">${(r.srvProblems || []).length}</span>` : ''}${ee.ign ? ` <span class="faint" title="из них в алгоритмах «не трогать»">(${ee.ign} не тр.)</span>` : ''}</td></tr>`; }).join('')}</tbody></table></div>`,
       '<button class="btn" data-act="closeModal">Закрыть</button>');
   }
 
