@@ -1381,7 +1381,7 @@ const DB = (() => {
   // этап человека: второй открывается, когда выполнено 100% документов первого
   function stage1Left(login) {
     const l = S.kinds.filter(k => k.assignee === login && k.guid);
-    return { total: l.length, left: l.filter(k => !isDone(k.status)).length };
+    return { total: l.length, left: l.filter(k => !isDone(k.status) && k.status !== 'interrupted').length };   // прерванные зачтены
   }
   const stage2Open = login => { const x = stage1Left(login); return x.total > 0 && x.left === 0; };
   const hasStage2 = login => S.kinds.some(k => k.assignee === login && k.docs2.length);
@@ -1424,9 +1424,11 @@ const DB = (() => {
     s.remaining = s.pending + s.interrupted;
     s.reviewable = list.filter(k => isDone(k.status)).length;
     s.toReview = list.filter(k => isDone(k.status) && !k.reviewStatus).length;
-    s.pct = !s.total ? 0 : s.done === s.total ? 100 : Math.min(99, Math.round((s.done / s.total) * 100));
+    // прерванные (не уложились в лимит сервера) засчитываются в процент выполнения — их уже прогоняли
+    const __зачтено = s.done + s.interrupted;
+    s.pct = !s.total ? 0 : __зачтено >= s.total ? 100 : Math.min(99, Math.round((__зачтено / s.total) * 100));
     s.avg = s.secs.length >= 3 ? s.secs.reduce((a, b) => a + b, 0) / s.secs.length : S.avgDocSec;
-    s.eta = s.avg != null ? s.avg * s.remaining : null;
+    s.eta = s.avg != null ? s.avg * s.pending : null;   // оценка — только по невыполнявшимся (прерванные зачтены)
     return s;
   }
 
@@ -1869,7 +1871,7 @@ const DB = (() => {
         <div class="hero-meta">
           <span>Проверено вручную: <b>${s.reviewed} из ${s.reviewable}</b> ${plural(s.reviewable, 'вида', 'видов', 'видов')}</span>
           <span>Средний документ: <b>${fmtSec(s.avg)}</b></span>
-          <span>Осталось примерно: <b>${s.eta != null && s.remaining ? fmtSec(s.eta) : s.remaining ? '—' : 'ничего 🎉'}</b></span>
+          <span>Осталось примерно: <b>${s.eta != null && s.pending ? fmtSec(s.eta) : s.pending ? '—' : 'ничего 🎉'}</b></span>
           ${lastUp ? `<span>Последний протокол: <b>${ago(lastUp.at)}</b> · ${esc(userName(lastUp.by))}</span>` : ''}
         </div>
       </div>
@@ -2143,7 +2145,7 @@ const DB = (() => {
         </div>
         ${s2 ? `<div style="margin-top:12px"><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px"><span class="stage-chip">этап 2</span><span class="muted"><b style="color:var(--text)">${s2.done}</b> из ${s2.total} · ${s2.pct}%</span></div>${progressBar(s2, true)}</div>` : ''}
         <div class="foot"><span>Проверено <b>${s.reviewed}</b>${s.issues ? ` · замечаний <b style="color:var(--issue)">${s.issues}</b>` : ''}</span>
-          <span>≈ <b>${s.eta != null && s.remaining ? fmtSec(s.eta) : s.remaining ? '—' : s2 && s2.remaining ? fmtSec(s2.eta) : 'готово'}</b></span></div>
+          <span>≈ <b>${s.eta != null && s.pending ? fmtSec(s.eta) : s.pending ? '—' : s2 && s2.pending ? fmtSec(s2.eta) : 'готово'}</b></span></div>
       </div>`;
     }).join('');
     return `
