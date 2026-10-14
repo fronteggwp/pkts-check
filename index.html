@@ -506,6 +506,56 @@ td.small { font-size: 12.5px; }
 .sm-chip.err, .sm-pill.err { background: var(--err-soft); color: var(--err); border-color: transparent; }
 .sm-chip.slow, .sm-pill.slow { background: var(--issue-soft, var(--surface-3)); color: var(--issue); border-color: transparent; }
 
+/* ---- секции документов */
+.kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; box-shadow: var(--shadow-sm); }
+.kpi .l { font-size: 12px; color: var(--muted); font-weight: 600; }
+.kpi .v { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.kpi .s { font-size: 11.5px; color: var(--faint); margin-top: 1px; }
+.kpi.click { cursor: pointer; transition: border-color .15s, transform .15s; }
+.kpi.click:hover { border-color: var(--border-strong); transform: translateY(-1px); }
+.kpi.on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.sec-check { margin-bottom: 12px; display: grid; gap: 6px; font-size: 13.5px; }
+.sec-check details summary { cursor: pointer; color: var(--muted); }
+.sec-check .vlist { margin: 6px 0 2px 14px; display: grid; gap: 3px; font-size: 13px; }
+.sec-list { display: grid; gap: 10px; }
+.sec { border: 1px solid var(--border); border-radius: 14px; background: var(--surface); overflow: hidden; }
+.sec-h { display: flex; gap: 12px; align-items: flex-start; padding: 11px 14px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+.sec-no { flex: none; min-width: 28px; height: 28px; padding: 0 6px; border-radius: 9px; background: var(--accent-soft); color: var(--accent-text); font-weight: 700; display: inline-flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums; font-size: 13px; }
+.sec-no.small { min-width: 22px; height: 20px; border-radius: 7px; font-size: 11.5px; }
+.sec-t { flex: 1; min-width: 0; }
+.sec-t b { font-weight: 650; }
+.sec-toc { color: var(--accent-text); }
+.sec-flags { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.sec-tbls { display: grid; }
+.sec-tbl { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(160px, 1.4fr) auto; gap: 10px; align-items: center; padding: 8px 14px 8px 12px; border-top: 1px solid var(--border); border-left: 3px solid transparent; font-size: 13px; }
+.sec-tbl:first-child { border-top: 0; }
+.sec-tbl.ok { border-left-color: var(--ok); }
+.sec-tbl.err, .sec-tbl.missing { border-left-color: var(--err); }
+.sec-tbl.slow { border-left-color: var(--int); }
+.sec-tbl.notran, .sec-tbl.noalg { border-left-color: var(--noi); }
+.sec-tn { color: var(--muted); }
+.sec-alg { font-size: 12.5px; word-break: break-all; cursor: pointer; }
+.sec-st { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.section .sec-tbls { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.sec-t { table-layout: fixed; width: 100%; }
+.sec-t td { vertical-align: top; overflow-wrap: anywhere; }
+.sec-t th:nth-child(1) { width: 17%; } .sec-t th:nth-child(2) { width: 24%; } .sec-t th:nth-child(3) { width: 19%; }
+.sec-t th:nth-child(4) { width: 13%; } .sec-t th:nth-child(5) { width: 15%; } .sec-t th:nth-child(6) { width: 12%; }
+.sec-t td.mono { font-size: 12px; }
+.sec-t td .pill { margin: 0 4px 3px 0; }
+@media (max-width: 900px) { .sec-t { table-layout: auto; } }
+@media (max-width: 640px) {
+  .sec-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sec-t, .sec-t tbody, .sec-t tr, .sec-t td { display: block; width: auto !important; }
+  .sec-t thead { display: none; }
+  .sec-t tr { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  .sec-t td { border: 0 !important; padding: 3px 0 !important; }
+  .sec-t td::before { content: attr(data-l); display: block; color: var(--muted); font-size: 11px; font-family: var(--font); text-transform: uppercase; letter-spacing: .04em; }
+  .sec-t td:empty { display: none; }
+}
+@media (max-width: 720px) { .sec-tbl { grid-template-columns: 1fr; } .sec-st { justify-content: flex-start; } }
+
 </style>
 </head>
 <body>
@@ -773,6 +823,9 @@ const DB = (() => {
   const LIGHT = 'id,upload_id,pos,guid,doctype,idx,total,start_at,end_at,load_sec,finished,implicit,kind_code,match,error_count,warnings,running,ps,err_algs,batch_id,alg_names,alg_vers,own_err_algs,srv_problems';
   const versionFromRow = r => ({ id: r.id, name: r.name, version: r.version, note: r.note, at: r.created_at, by: r.created_by, deployId: r.deploy_id, commit: r.commit, kind: r.kind || 'fix' });
   const deployFromRow = r => ({ id: r.id, at: r.at, by: r.by_login, note: r.note, algCount: r.alg_count });
+  const sectionFromRow = r => ({ kind: (r.kind_code || '').trim(), kindName: r.kind_name, kindType: r.kind_type, forCheck: !!r.for_check, role: r.role,
+    secOrder: r.sec_order, secCode: r.sec_code, secName: r.sec_name, tocOrder: r.toc_order, tocName: r.toc_name,
+    screen: r.screen, print: r.print, tblOrder: r.tbl_order, tblName: r.tbl_name, alg: r.alg, compiled: r.compiled, ours: r.ours });
   const flagFromRow = r => ({ name: r.name, ignored: r.ignored, note: r.note, by: r.by_login, at: r.at });
 
   function loadScript(src) {
@@ -857,6 +910,10 @@ const DB = (() => {
     async instances() {
       return (await this.page(() => this.sb.from('instances').select('id,kind_code,guid,ps,doctype,stage,ord').order('id')))
         .map(r => ({ id: r.id, kindCode: r.kind_code, guid: r.guid, ps: r.ps || '', doctype: r.doctype, stage: r.stage, ord: r.ord }));
+    }
+    // секции документов и алгоритмы, которые их заполняют (из базы ПиКТС 2.0; tools/load_sections.py)
+    async sections() {
+      return (await this.page(() => this.sb.from('kind_sections').select('*').order('id'))).map(sectionFromRow);
     }
     async algMeta() {
       const [flags, versions, deploys] = await Promise.all([
@@ -999,6 +1056,11 @@ const DB = (() => {
     }
     async runsAlgs(ids) { return this.st.runs.filter(r => ids.includes(r.id)); }
     async instances() { return this.st.instances; }
+    async sections() {   // демо: секции — из локального sections.json рядом со страницей (если есть)
+      if (this.st.sections) return this.st.sections;
+      try { const r = await fetch('sections.json'); if (r.ok) return await r.json(); } catch { }
+      return [];
+    }
     async algMeta() { return { flags: this.st.flags, versions: this.st.versions, deploys: this.st.deploys }; }
     async setAlgFlags(names, ignored, note, by) {
       const at = new Date().toISOString();
@@ -1069,9 +1131,10 @@ const DB = (() => {
       my: { q: '', status: 'all', type: 'all', stage: null },
       all: { q: '', status: 'all', type: 'all', who: 'all', stage: 1 },
       algs: { q: '', mode: 'all' },
+      sec: { q: '', mode: 'all', check: true, type: 'all', lim: 300 },
     },
     sort: { my: { key: 'status', dir: 1 }, all: { key: 'code', dir: 1 }, algs: { key: 'totalSec', dir: -1 } },
-    selected: new Set(), menu: false, uploading: false, algs: null,
+    selected: new Set(), menu: false, uploading: false, algs: null, sections: null,
   };
 
   const STATUS = {
@@ -1764,7 +1827,7 @@ const DB = (() => {
 
   function route() {
     const parts = location.hash.replace(/^#\/?/, '').split('/');
-    S.route = ['my', 'all', 'team', 'uploads', 'algs'].includes(parts[0]) ? parts[0] : 'my';
+    S.route = ['my', 'all', 'team', 'uploads', 'algs', 'sections'].includes(parts[0]) ? parts[0] : 'my';
     if (S.route === 'my' && isObserver()) S.route = 'all';
     const kind = parts[1] === 'k' && parts[2] ? decodeURIComponent(parts[2]) : null;
     const pageChanged = !$('#page') || $('#page').dataset.route !== S.route;
@@ -1800,6 +1863,7 @@ const DB = (() => {
           ${tab('team', 'Команда')}
           ${tab('uploads', 'Протоколы', S.uploadsList.length)}
           ${tab('algs', 'Алгоритмы', isDev() && S.pendingVers.length ? S.pendingVers.length : 0)}
+          ${tab('sections', 'Секции')}
         </nav>
         <button class="btn ghost icon hide-sm" data-act="refresh" title="Обновить данные">${I.refresh}</button>
         <button class="btn ghost icon" data-act="theme" title="Светлая / тёмная тема">${dark ? I.sun : I.moon}</button>
@@ -1824,6 +1888,7 @@ const DB = (() => {
     else if (S.route === 'team') { p.innerHTML = pageTeam(); loadEvents(); }
     else if (S.route === 'uploads') p.innerHTML = pageUploads();
     else if (S.route === 'algs') { p.innerHTML = pageAlgs(); loadAlgs(); }
+    else if (S.route === 'sections') { p.innerHTML = pageSections(); loadSectionsPage(); }
     bindDrops();
   }
 
@@ -2241,6 +2306,201 @@ const DB = (() => {
       <div id="algs"><div class="card card-pad">${'<div class="skel" style="margin:12px 0"></div>'.repeat(6)}</div></div>`;
   }
 
+  // =====================================================================================================================
+  // секции документов (из базы ПиКТС 2.0): вид → секция → пункт оглавления → таблица секции → алгоритм; «для проверки» — из списка отчётов
+  let sectionsLoading = null;
+  async function ensureSections() {
+    if (S.sections) return S.sections;
+    if (!sectionsLoading) {
+      sectionsLoading = DB.sections().then(rows => {
+        const by = new Map();
+        for (const r of rows) { if (!by.has(r.kind)) by.set(r.kind, []); by.get(r.kind).push(r); }
+        for (const l of by.values()) l.sort((a, b) => (a.role === 'section' ? 0 : 1) - (b.role === 'section' ? 0 : 1) || (a.secOrder ?? 0) - (b.secOrder ?? 0) || (a.tblOrder ?? 0) - (b.tblOrder ?? 0));
+        S.sections = { rows, by };
+        return S.sections;
+      }).finally(() => { sectionsLoading = null; });
+    }
+    return sectionsLoading;
+  }
+  // алгоритмы, которые у нас есть (st5): в видах сайта и в версиях
+  let knownAlgsCache = null;
+  function knownAlgs() {
+    if (knownAlgsCache && knownAlgsCache.kinds === S.kinds && knownAlgsCache.vers === S.versions) return knownAlgsCache.set;
+    const set = new Set();
+    for (const k of S.kinds) { k.algorithms.forEach(a => set.add(a.toLowerCase())); (k.linkAlgs || []).forEach(a => set.add(a.toLowerCase())); }
+    S.versions.forEach((v, name) => set.add(name.toLowerCase()));
+    knownAlgsCache = { kinds: S.kinds, vers: S.versions, set };
+    return set;
+  }
+  const isKnownAlg = name => !!name && knownAlgs().has(name.toLowerCase());
+  function secCountOf(code) {
+    const l = S.sections && S.sections.by.get(code);
+    return l ? new Set(l.filter(r => r.role === 'section').map(r => r.secOrder + '|' + r.secCode)).size : 0;
+  }
+  // статус алгоритма секции: нет у нас / без алгоритма / ошибка / медленный / не запускался / выполнен
+  function secAlgState(name, run, ours) {
+    if (!name) return 'noalg';
+    if (ours === false || (ours == null && !isKnownAlg(name))) return 'missing';   // ours — по файлам st5 при загрузке
+    if (!run) return 'notran';
+    if (run.failed && !ignored(name)) return 'err';
+    if (run.maxSec >= SLOW_SEC) return 'slow';
+    return 'ok';
+  }
+  const SEC_STATE = {
+    ok: { label: 'без ошибок', cls: 'ok', title: 'в последнем прогоне без ошибок' },
+    slow: { label: 'медленный', cls: 'fixp', title: 'дольше 5 минут' },
+    err: { label: 'ошибка', cls: 'errors', title: 'ошибка в последнем прогоне' },
+    notran: { label: 'не запускался', cls: 'plain', title: 'в загруженных протоколах этого алгоритма ещё нет' },
+    missing: { label: 'нет у нас', cls: 'errors', title: 'алгоритм есть в базе ПиКТС 2.0, но его нет среди наших (st5)' },
+    noalg: { label: 'без алгоритма', cls: 'plain', title: 'в секции нет таблицы с алгоритмом' },
+  };
+  function secStatePill(st, run) {
+    const d = SEC_STATE[st];
+    const t = run && st !== 'missing' && st !== 'noalg' ? ` · ${fmtSec(run.maxSec)}` : '';
+    return `<span class="pill ${d.cls} small" title="${esc(d.title)}">${d.label}${t}</span>`;
+  }
+  function secVerPill(name) {
+    const vi = name ? verInfo(name) : null;
+    if (!vi || vi.available <= 1) return '';
+    return ` <span class="pill ${vi.pending ? 'fixp' : 'fixd'} small" title="${esc(vi.notes)}">${verLabel(vi.available)}${vi.pending ? ', ждёт выкладки' : ''}</span>`;
+  }
+  const SEC_ROLE = { links: 'Генерация связей', params: 'Проверка параметров' };
+
+  // вкладка «Секции» в карточке вида: оглавление документа и алгоритмы секций (статус — по прогону этого вида)
+  function sectionsTab(k, algMap) {
+    if (!S.sections) {
+      ensureSections().then(() => { if (S.tab === 'sections' && S.cur && S.cur.k.code === k.code) renderDrawer(); }).catch(e => toast(e.message, true));
+      return `<div class="card-pad">${'<div class="skel" style="margin:12px 0"></div>'.repeat(6)}</div>`;
+    }
+    const rows = S.sections.by.get(k.code) || [];
+    if (!rows.length) return `<div class="empty"><div class="ico">📑</div>В выгрузке секций из базы ПиКТС 2.0 этого вида нет</div>`;
+    const runOf = name => name ? algMap.get(name.toLowerCase()) : null;
+    const secs = [];
+    for (const r of rows.filter(r => r.role === 'section')) {
+      const key = r.secOrder + '|' + r.secCode;
+      let sct = secs[secs.length - 1];
+      if (!sct || sct.key !== key) secs.push(sct = { key, r, tbls: [] });
+      sct.tbls.push(r);
+    }
+    const kindAlgs = rows.filter(r => r.role !== 'section');
+    const all = rows.filter(r => r.alg);
+    const states = all.map(r => secAlgState(r.alg, runOf(r.alg), r.ours));
+    const cnt = st => states.filter(x => x === st).length;
+    const noAlg = secs.filter(s => s.tbls.every(t => !t.alg)).length;
+    const inToc = secs.filter(s => s.r.tocName).length;
+    const forCheck = rows.some(r => r.forCheck);
+    const tile = (l, v, col) => `<div class="mg"><div class="l">${l}</div><div class="v"${col ? ` style="color:${col}"` : ''}>${v}</div></div>`;
+    const tblLine = t => {
+      const run = runOf(t.alg);
+      const st = secAlgState(t.alg, run, t.ours);
+      return `<div class="sec-tbl ${st}">
+        <span class="sec-tn">${t.tblName ? esc(t.tblName) : '<span class="faint">таблица</span>'}</span>
+        ${t.alg ? `<span class="mono sec-alg copy" data-act="copy" data-text="${esc(t.alg)}" title="Скопировать имя алгоритма">${esc(t.alg)}</span>` : ''}
+        <span class="sec-st">${secStatePill(st, run)}${secVerPill(t.alg)}${t.compiled === 0 ? ' <span class="pill plain small" title="в базе ПиКТС 2.0 алгоритм отмечен как не скомпилированный">не скомпилирован в 2.0</span>' : ''}</span></div>`;
+    };
+    return `
+      <div class="why" style="margin:0 0 12px">${forCheck ? '<span class="pill ok small">для проверки</span> ' : '<span class="pill plain small" title="в списке отчётов не отмечен «Отчет для проверки»">не в списке для проверки</span> '}
+        Секции и их таблицы — из базы ПиКТС 2.0, оглавление — из списка отчётов. Статус алгоритма — по последнему прогону этого вида.</div>
+      <div class="meta-grid sec-tiles" style="margin-bottom:14px">
+        ${tile('Секций', secs.length)}${tile('В оглавлении', inToc)}${tile('Алгоритмов', all.length)}
+        ${tile('С ошибкой', cnt('err'), cnt('err') ? 'var(--err)' : '')}${tile('Не запускались', cnt('notran'))}
+        ${tile('Нет у нас', cnt('missing'), cnt('missing') ? 'var(--err)' : '')}${tile('Секций без алгоритма', noAlg)}
+      </div>
+      <div class="sec-list">${secs.map(s => `<div class="sec">
+        <div class="sec-h"><span class="sec-no">${s.r.secOrder ?? '·'}</span>
+          <div class="sec-t"><b>${esc(s.r.secName || '—')}</b>
+            <div class="sub-line"><span class="mono">${esc(s.r.secCode || '')}</span>${s.r.tocName ? ` · <span class="sec-toc" title="пункт оглавления">📑 ${s.r.tocOrder ? esc(String(s.r.tocOrder)) + ' · ' : ''}${esc(s.r.tocName)}</span>` : ' · <span class="faint">нет в оглавлении</span>'}</div></div>
+          <div class="sec-flags">${s.r.screen === false ? '<span class="pill plain small" title="не показывается на экранной форме">не на экране</span>' : ''}${s.r.print === false ? '<span class="pill plain small" title="не выводится на печатной форме">не в печати</span>' : ''}</div></div>
+        <div class="sec-tbls">${s.tbls.every(t => !t.alg && !t.tblName) ? `<div class="sec-tbl noalg"><span class="faint">в секции нет таблиц с алгоритмом</span></div>` : s.tbls.map(tblLine).join('')}</div>
+      </div>`).join('')}</div>
+      ${kindAlgs.length ? `<div class="section" style="margin-top:16px"><h4>Алгоритмы вида</h4><div class="sec-tbls">${kindAlgs.map(r => tblLine({ ...r, tblName: SEC_ROLE[r.role] || r.role })).join('')}</div></div>` : ''}`;
+  }
+
+  // ---- страница «Секции»: сводка, сверка с сайтом и поиск по всем секциям
+  function pageSections() {
+    const f = S.f.sec;
+    return `
+      <div class="page-title"><h1>Секции документов</h1><span class="sub">вид → секция → оглавление → таблица → алгоритм · из базы ПиКТС 2.0 и списка отчётов для проверки</span></div>
+      <div id="secTop"><div class="card card-pad">${'<div class="skel" style="margin:12px 0"></div>'.repeat(3)}</div></div>
+      <div class="toolbar"><div class="search">${I.search}<input class="input" id="q-sections" data-act="sq" placeholder="Вид, секция, оглавление или алгоритм" value="${esc(f.q)}"><kbd class="hide-sm">/</kbd></div>
+        <select class="input" data-act="stype" style="width:auto">${['all', 'Паспорт (формуляр)', 'Паспорт на систему', 'Сводный документ', 'Аналитический отчет'].map(t => `<option value="${esc(t)}" ${f.type === t ? 'selected' : ''}>${t === 'all' ? 'Все типы' : esc(t)}</option>`).join('')}</select>
+        <label class="check" style="font-size:13px"><input type="checkbox" data-act="scheck" ${f.check ? 'checked' : ''}> только для проверки</label></div>
+      <div class="seg" id="secModes" style="margin-bottom:12px"></div>
+      <div id="secTbl"></div>`;
+  }
+  async function loadSectionsPage() {
+    const [secs] = await Promise.all([safe(() => ensureSections()), safe(() => ensureAlgs())]);
+    if (!secs || S.route !== 'sections') return;
+    renderSections();
+  }
+  function secRowsAll() {
+    const runs = new Map((S.algs || []).map(a => [a.name.toLowerCase(), a]));
+    return S.sections.rows.map(r => {
+      const run = r.alg ? runs.get(r.alg.toLowerCase()) : null;
+      const runN = run ? { failed: run.failed > 0, maxSec: run.maxSec } : null;
+      return { r, run: runN, st: secAlgState(r.alg, runN, r.ours) };
+    });
+  }
+  function renderSections() {
+    const top = $('#secTop'), tbl = $('#secTbl');
+    if (!top || !tbl || !S.sections) return;
+    const f = S.f.sec;
+    const all = secRowsAll();
+    const scope = all.filter(x => (!f.check || x.r.forCheck) && (f.type === 'all' || x.r.kindType === f.type));
+    // сводка
+    const kindsCheck = new Set(all.filter(x => x.r.forCheck).map(x => x.r.kind));
+    const siteKinds = new Set(S.kinds.map(k => k.code));
+    const notOnSite = [...kindsCheck].filter(c => !siteKinds.has(c)).sort();
+    const notMarked = [...siteKinds].filter(c => !kindsCheck.has(c)).sort();
+    const diffKinds = [];
+    for (const c of kindsCheck) {
+      const k = kindByCode(c);
+      if (!k) continue;
+      const db = new Set(all.filter(x => x.r.kind === c && x.r.alg).map(x => x.r.alg.toLowerCase()));
+      const site = new Set(k.algorithms.concat(k.linkAlgs || []).map(a => a.toLowerCase()));
+      const onlyDb = [...db].filter(a => !site.has(a)), onlySite = [...site].filter(a => !db.has(a));
+      if (onlyDb.length || onlySite.length) diffKinds.push({ c, onlyDb, onlySite });
+    }
+    const secs = new Set(scope.filter(x => x.r.role === 'section').map(x => x.r.kind + '|' + x.r.secOrder + '|' + x.r.secCode));
+    const withAlg = scope.filter(x => x.r.alg);
+    const cnt = st => scope.filter(x => x.st === st).length;
+    const missingAlgs = [...new Set(scope.filter(x => x.st === 'missing').map(x => x.r.alg))];
+    const kpi = (l, v, sub, col, mode) => `<div class="kpi ${mode ? 'click' : ''} ${f.mode === mode ? 'on' : ''}" ${mode ? `data-act="smode" data-key="${mode}"` : ''}><div class="l">${l}</div><div class="v"${col ? ` style="color:${col}"` : ''}>${v}</div>${sub ? `<div class="s">${sub}</div>` : ''}</div>`;
+    top.innerHTML = `<div class="kpis">
+        ${kpi('Видов', new Set(scope.map(x => x.r.kind)).size, f.check ? 'для проверки' : 'все')}
+        ${kpi('Секций', secs.size)}
+        ${kpi('Алгоритмов в секциях', withAlg.length, `${new Set(withAlg.map(x => x.r.alg)).size} разных`)}
+        ${kpi('С ошибкой', cnt('err'), 'в последнем прогоне', cnt('err') ? 'var(--err)' : '', 'err')}
+        ${kpi('Не запускались', cnt('notran'), 'нет в протоколах', '', 'notran')}
+        ${kpi('Нет у нас', missingAlgs.length, 'алгоритмов из базы 2.0', missingAlgs.length ? 'var(--err)' : '', 'missing')}
+        ${kpi('Без алгоритма', cnt('noalg'), 'секций', '', 'noalg')}
+      </div>
+      ${(notOnSite.length || notMarked.length || diffKinds.length) ? `<div class="card card-pad sec-check"><b>Сверка со списком видов сайта</b>
+        ${diffKinds.length ? `<details><summary>Состав алгоритмов отличается — ${diffKinds.length} ${plural(diffKinds.length, 'вид', 'вида', 'видов')}</summary><div class="vlist">${diffKinds.map(d => `<div><a href="#" data-act="secKind" data-kind="${esc(d.c)}">${esc(d.c)}</a>${d.onlyDb.length ? ` — в базе 2.0 есть, у нас нет: <span class="mono">${esc(d.onlyDb.join(', '))}</span>` : ''}${d.onlySite.length ? ` — у нас есть, в базе у вида нет: <span class="mono">${esc(d.onlySite.join(', '))}</span>` : ''}</div>`).join('')}</div></details>` : ''}
+        ${notOnSite.length ? `<details><summary>Виды для проверки, которых нет на сайте — ${notOnSite.length}</summary><div class="vlist">${notOnSite.map(c => `<div><span class="mono">${esc(c)}</span> <span class="faint">${esc((all.find(x => x.r.kind === c) || {}).r?.kindName || '')}</span></div>`).join('')}</div></details>` : ''}
+        ${notMarked.length ? `<details><summary>Виды сайта, не отмеченные для проверки — ${notMarked.length}</summary><div class="vlist">${notMarked.map(c => `<div><a href="#" data-act="secKind" data-kind="${esc(c)}">${esc(c)}</a> <span class="faint">${esc((kindByCode(c) || {}).name || '')}</span></div>`).join('')}</div></details>` : ''}
+      </div>` : ''}`;
+    // режимы
+    const mb = (key, label, col, n) => `<button class="${f.mode === key ? 'on' : ''}" data-act="smode" data-key="${key}">${col ? `<span class="dot" style="background:${col}"></span>` : ''}${label}<span class="n">${n}</span></button>`;
+    $('#secModes').innerHTML = mb('all', 'Все', '', scope.length) + mb('err', 'С ошибкой', 'var(--err)', cnt('err')) + mb('slow', 'Медленные', 'var(--int)', cnt('slow'))
+      + mb('notran', 'Не запускались', 'var(--pend)', cnt('notran')) + mb('missing', 'Нет у нас', 'var(--err)', cnt('missing')) + mb('noalg', 'Без алгоритма', 'var(--noi)', cnt('noalg'));
+    // таблица
+    const q = f.q.trim().toLowerCase();
+    const list = scope.filter(x => (f.mode === 'all' || x.st === f.mode)
+      && (!q || [x.r.kind, x.r.kindName, x.r.secName, x.r.secCode, x.r.tocName, x.r.tblName, x.r.alg].some(v => v && String(v).toLowerCase().includes(q))));
+    if (!list.length) { tbl.innerHTML = '<div class="card"><div class="empty"><div class="ico">🔎</div>Ничего не найдено</div></div>'; return; }
+    const shown = list.slice(0, f.lim);
+    tbl.innerHTML = `<div class="card table-wrap"><table class="t sec-t"><thead><tr><th class="nosort">Вид</th><th class="nosort">Секция</th><th class="nosort">Оглавление</th><th class="nosort">Таблица</th><th class="nosort">Алгоритм</th><th class="nosort">Статус</th></tr></thead>
+      <tbody>${shown.map(x => { const r = x.r; const onSite = !!kindByCode(r.kind); return `<tr ${onSite ? `data-act="secKind" data-kind="${esc(r.kind)}"` : 'style="cursor:default"'}>
+        <td data-l="Вид"><b class="mono">${esc(r.kind)}</b><div class="sub-line">${esc(r.kindName || '')}</div></td>
+        <td data-l="Секция">${r.role === 'section' ? `<span class="sec-no small">${r.secOrder ?? '·'}</span> ${esc(r.secName || '')}<div class="sub-line mono">${esc(r.secCode || '')}${r.screen === false ? ' · не на экране' : ''}${r.print === false ? ' · не в печати' : ''}</div>` : `<span class="faint">${esc(SEC_ROLE[r.role] || r.role)}</span>`}</td>
+        <td data-l="Оглавление">${r.tocName ? `${r.tocOrder ? `<span class="faint">${esc(String(r.tocOrder))}</span> ` : ''}${esc(r.tocName)}` : '<span class="faint">—</span>'}</td>
+        <td data-l="Таблица">${esc(r.tblName || '')}</td>
+        <td data-l="Алгоритм" class="mono">${r.alg ? esc(r.alg) : '<span class="faint">—</span>'}</td>
+        <td data-l="Статус">${secStatePill(x.st, x.run)}${secVerPill(r.alg)}</td></tr>`; }).join('')}</tbody></table></div>
+      ${list.length > shown.length ? `<div style="text-align:center;margin:12px 0"><button class="btn" data-act="smore">Показать ещё (${list.length - shown.length})</button></div>` : `<div class="faint" style="text-align:center;margin:10px 0;font-size:12.5px">${list.length} ${plural(list.length, 'строка', 'строки', 'строк')}</div>`}`;
+  }
+
   function deployBox() {
     const pend = S.pendingVers;
     const last = S.deploys[0];
@@ -2268,12 +2528,16 @@ const DB = (() => {
   }
 
   async function loadAlgs() {
+    if (await ensureAlgs()) renderAlgs();
+  }
+  // статистика алгоритмов по последнему завершённому прогону каждого документа (общая для «Алгоритмов» и «Секций»)
+  async function ensureAlgs() {
     if (!S.algs) {
       const ids = [...new Set(S.kinds.flatMap(k => [k.s1.fin && k.s1.fin.id, ...k.docs2.map(d => d.st.fin && d.st.fin.id)]).filter(Boolean))];
       const rows = [];
       for (let i = 0; i < ids.length; i += 1000) {
         const part = await safe(() => DB.runsAlgs(ids.slice(i, i + 1000)));
-        if (!part) return;
+        if (!part) return false;
         rows.push(...part);
       }
       const startOf = new Map(S.runs.map(r => [r.id, ts(r.startAt)]));
@@ -2289,7 +2553,7 @@ const DB = (() => {
       S.versions.forEach((vs, name) => get(name));   // исправленные, даже если ещё не запускались
       S.algs = [...acc.values()].map(x => ({ ...x, kinds: [...x.kinds], avgSec: x.count ? x.totalSec / x.count : 0, lastSec: x.lastSec ?? -1 }));
     }
-    renderAlgs();
+    return true;
   }
 
   function algMode(a) {
@@ -2378,6 +2642,7 @@ const DB = (() => {
     if (!runs || S.kindOpen !== code) return;
     S.cur = { k, runs };
     renderDrawer();
+    if (!S.sections) ensureSections().then(() => { if (S.kindOpen === code) renderDrawer(); }).catch(() => { });   // число секций на вкладке
   }
 
   // ошибка с пометками: «не трогать», исправлено и выложено / ждёт выкладки
@@ -2498,6 +2763,8 @@ const DB = (() => {
     } else if (tab === 'errors') {
       body = errDocs.length ? errDocs.map(d => { const r = finOf(d); return `<div class="doc-h">${docLabel(d)} <span class="faint">${fmtDT(r.startAt, true)}</span></div>${(r.errors || []).filter(e => !isSrvErr(e, r)).map(e => errBox(e, r)).join('')}${srvBlock(r)}`; }).join('')
         : '<div class="empty"><div class="ico">✅</div>Ошибок и серверных проблем в последних прогонах нет</div>';
+    } else if (tab === 'sections') {
+      body = sectionsTab(k, algMap);
     } else if (tab === 'algs') {
       body = `${algRun && algRun !== lastFin ? '<div class="faint" style="margin-bottom:8px;font-size:12.5px">по документу этапа 2</div>' : ''}<div class="table-wrap"><table class="t"><thead><tr><th class="nosort">Алгоритм</th><th class="nosort num">Запусков</th><th class="nosort num">Время</th><th class="nosort" style="width:130px"></th><th class="nosort num">Макс.</th></tr></thead>
         <tbody>${algs.map(a => { const vi = verInfo(a.name); return `<tr style="cursor:default">
@@ -2538,7 +2805,7 @@ const DB = (() => {
           <span>${typeRu(k.doctype, k.category)}</span><span>${who(k.assignee)}</span><span>${k.algCount} ${plural(k.algCount, 'алгоритм', 'алгоритма', 'алгоритмов')}${k.linkAlgs && k.linkAlgs.length ? ` + связи` : ''}</span>
           ${k.guid ? `<span class="copy mono" data-act="copy" data-text="${esc(k.guid)}" title="Скопировать GUID">${esc(k.guid)}</span>` : '<span class="faint">нет экземпляра документа</span>'}
         </div>
-        <div class="tabs">${tb('overview', 'Обзор')}${k.docs2.length ? tb('docs', 'Документы', docs.length) : ''}${tb('errors', 'Ошибки', errTotal, true, srvTotal)}${tb('algs', 'Алгоритмы', algs.length)}${tb('history', 'История', runs.length)}</div>
+        <div class="tabs">${tb('overview', 'Обзор')}${k.docs2.length ? tb('docs', 'Документы', docs.length) : ''}${tb('errors', 'Ошибки', errTotal, true, srvTotal)}${tb('algs', 'Алгоритмы', algs.length)}${tb('sections', 'Секции', S.sections ? (secCountOf(k.code) || null) : null)}${tb('history', 'История', runs.length)}</div>
       </div>
       <div class="drawer-body">${body}</div>
     </aside>`;
@@ -2872,6 +3139,9 @@ const DB = (() => {
         break;
       }
       case 'amode': S.f.algs.mode = t.dataset.key; renderAlgs(); break;
+      case 'smode': S.f.sec.mode = S.f.sec.mode === t.dataset.key && t.classList.contains('kpi') ? 'all' : t.dataset.key; S.f.sec.lim = 300; renderSections(); break;
+      case 'smore': S.f.sec.lim += 500; renderSections(); break;
+      case 'secKind': e.preventDefault(); if (!kindByCode(t.dataset.kind)) { toast('Вида ' + t.dataset.kind + ' нет на сайте', true); break; } S.tab = 'sections'; go(S.route === 'sections' ? 'sections' : S.route, t.dataset.kind); break;
       case 'asel': if (t.checked) S.algSel.add(t.dataset.name); else S.algSel.delete(t.dataset.name); renderAlgs(); break;
       case 'aselAll': {
         const rows = $$('#algs tbody tr[data-alg]').map(tr => tr.dataset.alg);
@@ -3058,6 +3328,7 @@ const DB = (() => {
     const t = e.target;
     if (t.dataset.act === 'q') { S.f[t.dataset.page].q = t.value; refreshTable(t.dataset.page); }
     else if (t.dataset.act === 'aq') { S.f.algs.q = t.value; renderAlgs(); }
+    else if (t.dataset.act === 'sq') { S.f.sec.q = t.value; S.f.sec.lim = 300; renderSections(); }
   });
 
   document.addEventListener('change', e => {
@@ -3065,6 +3336,8 @@ const DB = (() => {
     if (t.dataset.act === 'type') { S.f[t.dataset.page].type = t.value; renderPage(); }
     else if (t.dataset.act === 'who') { S.f.all.who = t.value; S.selected.clear(); renderPage(); }
     else if (t.dataset.act === 'autoNext') setPref('autoNext', t.checked ? '1' : '0');
+    else if (t.dataset.act === 'stype') { S.f.sec.type = t.value; S.f.sec.lim = 300; renderSections(); }
+    else if (t.dataset.act === 'scheck') { S.f.sec.check = t.checked; S.f.sec.lim = 300; renderSections(); }
     else if (t.dataset.act === 'smartOpt' && S.smart) { S.smart[t.dataset.k] = t.type === 'checkbox' ? t.checked : t.value; renderSmart(); }
   });
 
