@@ -555,6 +555,11 @@ td.small { font-size: 12.5px; }
   .sec-t td:empty { display: none; }
 }
 @media (max-width: 720px) { .sec-tbl { grid-template-columns: 1fr; } .sec-st { justify-content: flex-start; } }
+/* код группы вида */
+.grp { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 6px; font: 500 11px/18px var(--mono); color: var(--accent-text); background: var(--accent-soft); vertical-align: middle; white-space: nowrap; }
+.type .grp { margin-left: 6px; }
+.grp-line { font-family: var(--font); }
+.grp-line .grp { margin: 0 0 0 4px; }
 
 </style>
 </head>
@@ -777,7 +782,7 @@ const DB = (() => {
   const SB_CDN = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
 
   const kindFromRow = r => ({
-    code: r.code, name: r.name || '', doctype: r.doctype, category: r.category || (r.doctype === 'Passport' ? 'passport' : 'summary'),
+    code: r.code, name: r.name || '', grp: r.grp || '', doctype: r.doctype, category: r.category || (r.doctype === 'Passport' ? 'passport' : 'summary'),
     guid: r.guid, ps: r.ps || '', assignee: r.assignee, algorithms: r.algorithms || [], linkAlgs: r.link_algs || [],   // ps — набор параметров первого этапа ('' — BatchRun)
     reviewStatus: r.review_status, reviewComment: r.review_comment, reviewBy: r.review_by, reviewAt: r.review_at,
     review2Status: r.review2_status, review2Comment: r.review2_comment, review2By: r.review2_by, review2At: r.review2_at,
@@ -1686,7 +1691,7 @@ const DB = (() => {
       return head + `<tr class="${on ? '' : 'sm-off'}${x.heavy ? ' sm-heavy' : ''}" data-act="smartPick" data-key="${esc(smartKey(x))}">
         <td class="sm-cb"><input type="checkbox" ${on ? 'checked' : ''} data-act="smartPick" data-key="${esc(smartKey(x))}"></td>
         <td class="muted num">${on ? ++n : '—'}</td>
-        <td><b>${esc(x.kind)}</b><div class="sub-line">${esc(x.name || '')}</div></td>
+        <td><b>${esc(x.kind)}</b>${grpTag(grpOf(x.kind))}<div class="sub-line">${esc(x.name || '')}</div></td>
         <td><span class="sm-pill ${SMART_PILL[x.cat]}">${SMART_CAT[x.cat]}</span></td>
         <td class="nowrap"><div class="sm-est">${fmtEst(x)}</div>${bar(x)}</td>
         <td class="muted small">${esc(x.src)}</td></tr>`;
@@ -2018,7 +2023,7 @@ const DB = (() => {
       }
       if (f.type !== 'all') { if (f.type === 'analytic' ? k.category !== 'analytic' : (k.doctype !== f.type || k.category === 'analytic')) return false; }
       if (f.who && f.who !== 'all') { if (f.who === 'none' ? k.assignee : k.assignee !== f.who) return false; }
-      if (q && !(k.code.toLowerCase().includes(q) || (k.name || '').toLowerCase().includes(q) || (k.guid || '').includes(q)
+      if (q && !(k.code.toLowerCase().includes(q) || (k.name || '').toLowerCase().includes(q) || (k.guid || '').includes(q) || (k.grp || '').includes(q)
         || k.algorithms.some(a => a.toLowerCase().includes(q)) || k.docs2.some(d => d.guid.includes(q)))) return false;
       return true;
     });
@@ -2107,7 +2112,7 @@ const DB = (() => {
       <tbody>${rows.map(k => `<tr data-kind="${esc(k.code)}" class="${S.selected.has(k.code) ? 'sel' : ''}">
         ${bulk ? `<td data-stop="1"><input type="checkbox" data-act="sel" data-code="${esc(k.code)}" ${S.selected.has(k.code) ? 'checked' : ''}></td>` : ''}
         <td>${pill(k.status)}${stage === 2 ? mini(k.progress) : ''}${statusNote(k)}</td>
-        <td class="code">${esc(k.code)}<div class="type">${typeRu(k.doctype, k.category)}</div></td>
+        <td class="code">${esc(k.code)}<div class="type">${typeRu(k.doctype, k.category)}${grpTag(k.grp)}</div></td>
         <td class="name"><div class="nm">${esc(k.name) || '<span class="faint">—</span>'}</div></td>
         ${showWho ? `<td>${who(k.assignee)}</td>` : ''}
         <td class="num muted">${stage === 2 ? k.progress.total : k.algCount}</td>
@@ -2234,6 +2239,21 @@ const DB = (() => {
   }
 
   const kindByCode = code => S.kinds.find(k => k.code === code);
+  // код группы вида (из «Все гуиды»); у алгоритма — коды групп видов, в которых он используется
+  const grpOf = code => (kindByCode(code) || {}).grp || '';
+  const grpList = g => (g || '').split(',').map(x => x.trim()).filter(Boolean);
+  const grpTag = g => grpList(g).map(x => `<span class="grp" title="код группы">${esc(x)}</span>`).join('');
+  let algGrpMap = null, algGrpKinds = null;
+  const algGroups = name => {
+    if (algGrpKinds !== S.kinds) {
+      algGrpKinds = S.kinds; algGrpMap = new Map();
+      S.kinds.forEach(k => k.grp && [...(k.algorithms || []), ...(k.linkAlgs || [])].forEach(a => {
+        const key = a.toLowerCase(); if (!algGrpMap.has(key)) algGrpMap.set(key, new Set()); grpList(k.grp).forEach(g => algGrpMap.get(key).add(g));
+      }));
+    }
+    return [...(algGrpMap.get(name.toLowerCase()) || [])].sort();
+  };
+  const algGrpLine = name => { const g = algGroups(name); return g.length ? `<div class="sub-line grp-line">группа ${g.slice(0, 4).map(grpTag).join('')}${g.length > 4 ? ` <span class="faint" title="${esc(g.slice(4).join(', '))}">+${g.length - 4}</span>` : ''}</div>` : ''; };
   function uploadStats(id) {
     const rs = S.runs.filter(r => r.uploadId === id);
     const owners = {};
@@ -2492,7 +2512,7 @@ const DB = (() => {
     const shown = list.slice(0, f.lim);
     tbl.innerHTML = `<div class="card table-wrap"><table class="t sec-t"><thead><tr><th class="nosort">Вид</th><th class="nosort">Секция</th><th class="nosort">Оглавление</th><th class="nosort">Таблица</th><th class="nosort">Алгоритм</th><th class="nosort">Статус</th></tr></thead>
       <tbody>${shown.map(x => { const r = x.r; const onSite = !!kindByCode(r.kind); return `<tr ${onSite ? `data-act="secKind" data-kind="${esc(r.kind)}"` : 'style="cursor:default"'}>
-        <td data-l="Вид"><b class="mono">${esc(r.kind)}</b><div class="sub-line">${esc(r.kindName || '')}</div></td>
+        <td data-l="Вид"><b class="mono">${esc(r.kind)}</b>${grpTag(grpOf(r.kind))}<div class="sub-line">${esc(r.kindName || '')}</div></td>
         <td data-l="Секция">${r.role === 'section' ? `<span class="sec-no small">${r.secOrder ?? '·'}</span> ${esc(r.secName || '')}<div class="sub-line mono">${esc(r.secCode || '')}${r.screen === false ? ' · не на экране' : ''}${r.print === false ? ' · не в печати' : ''}</div>` : `<span class="faint">${esc(SEC_ROLE[r.role] || r.role)}</span>`}</td>
         <td data-l="Оглавление">${r.tocName ? `${r.tocOrder ? `<span class="faint">${esc(String(r.tocOrder))}</span> ` : ''}${esc(r.tocName)}` : '<span class="faint">—</span>'}</td>
         <td data-l="Таблица">${esc(r.tblName || '')}</td>
@@ -2575,7 +2595,7 @@ const DB = (() => {
     $('#algModes').innerHTML = mb('all', 'Все') + mb('failed', 'С ошибками', 'var(--err)') + mb('slow', 'Медленные (≥ 5 мин)', 'var(--int)')
       + mb('ignored', 'Не трогать', 'var(--faint)') + mb('pending', 'Ждут выкладки', 'var(--int)') + mb('deployed', 'Исправлены', 'var(--rev)')
       + (counts.behind ? mb('behind', 'На сервере старая версия', 'var(--err)') : '');
-    const list = withMode.filter(({ a, m }) => (!q || a.name.toLowerCase().includes(q))
+    const list = withMode.filter(({ a, m }) => (!q || a.name.toLowerCase().includes(q) || algGroups(a.name).some(g => g.includes(q)))
       && (mode === 'all' || (mode === 'failed' && m.failed) || (mode === 'slow' && m.slow) || (mode === 'ignored' && m.ign) || (mode === 'pending' && m.pending) || (mode === 'deployed' && m.deployed) || (mode === 'behind' && (m.behind || m.rollback))))
       .sort((x, y) => (x.a[s.key] < y.a[s.key] ? -1 : x.a[s.key] > y.a[s.key] ? 1 : 0) * s.dir);
     const max = Math.max(1, ...S.algs.map(a => a.maxSec));
@@ -2607,7 +2627,7 @@ const DB = (() => {
       <tbody>${shown.map(({ a, m }) => `<tr data-alg="${esc(a.name)}" class="${S.algSel.has(a.name) ? 'sel' : ''}">
         ${dev ? `<td data-stop="1"><input type="checkbox" data-act="asel" data-name="${esc(a.name)}" ${S.algSel.has(a.name) ? 'checked' : ''}></td>` : ''}
         <td class="mono">${esc(a.name)}${S.links && S.links.has(a.name.toLowerCase()) ? ' <span class="faint">(связи)</span>' : ''}
-          ${m.slow ? ' <span class="pill fixp small" title="Дольше 5 минут — кандидат на оптимизацию">медленный</span>' : ''}${m.ign ? ` <span class="pill ign small" title="${flagTitle(a.name)}">${I.mute} не трогать</span>` : ''}</td>
+          ${m.slow ? ' <span class="pill fixp small" title="Дольше 5 минут — кандидат на оптимизацию">медленный</span>' : ''}${m.ign ? ` <span class="pill ign small" title="${flagTitle(a.name)}">${I.mute} не трогать</span>` : ''}${algGrpLine(a.name)}</td>
         <td class="num">${a.docs}</td>
         <td class="num">${a.lastSec >= 0 ? fmtSec(a.lastSec) : '<span class="faint">—</span>'}</td>
         <td class="num">${fmtSec(a.avgSec)}</td><td class="num"><b style="${m.slow ? 'color:var(--int)' : ''}">${fmtSec(a.maxSec)}</b></td>
@@ -2792,7 +2812,7 @@ const DB = (() => {
     ov.innerHTML = `<div class="backdrop" data-act="closeDrawer"></div>
     <aside class="drawer" role="dialog" aria-label="Вид ${esc(k.code)}">
       <div class="drawer-head">
-        <div class="row1"><span class="code">${esc(k.code)}</span>${pill(v.status || k.status)}${stage === 2 ? ` <span class="stage-chip">этап 2 · ${k.s2.done}/${k.s2.total}</span>` : ''}
+        <div class="row1"><span class="code">${esc(k.code)}</span>${grpTag(k.grp)}${pill(v.status || k.status)}${stage === 2 ? ` <span class="stage-chip">этап 2 · ${k.s2.done}/${k.s2.total}</span>` : ''}
           ${rv.st === 'ok' ? `<span class="pill rev">${I.check}Проверено</span>` : rv.st === 'issue' ? `<span class="pill issue">${I.flag}Замечание</span>` : ''}
           <div class="drawer-nav">
             ${pos >= 0 ? `<button class="btn ghost icon" data-act="prev" title="Предыдущий (←)" ${pos <= 0 ? 'disabled' : ''}>${I.left}</button>
@@ -3002,7 +3022,7 @@ const DB = (() => {
       <tbody>${runs.map(r => { const ee = effErrors({ ...r, errAlgs: r.errAlgs || (r.errors || []).map(e => e.alg || '') }); return `<tr style="cursor:default">
         <td class="muted">${r.total ? r.idx : r.pos + 1}</td>
         <td class="mono" style="font-size:11.5px">${r.guid ? esc(r.guid) : '<span class="faint">без GUID</span>'}${r.ps ? ` <span class="pill plain small">${esc(psLabel(r.ps))}</span>` : ''}<div class="faint">${fmtDT(r.startAt)}</div></td>
-        <td>${r.kindCode ? `<a href="#/${S.route}/k/${encodeURIComponent(r.kindCode)}">${esc(r.kindCode)}</a><div class="sub-line">${esc(kname(r.kindCode))}</div>${owner(r.kindCode)}
+        <td>${r.kindCode ? `<a href="#/${S.route}/k/${encodeURIComponent(r.kindCode)}">${esc(r.kindCode)}</a>${grpTag(grpOf(r.kindCode))}<div class="sub-line">${esc(kname(r.kindCode))}</div>${owner(r.kindCode)}
             ${!r.guid ? `<button class="btn small ghost" data-act="unattribute" data-run="${r.id}" data-upload="${u.id}">изменить</button>` : ''}`
         : r.guid ? '<span class="faint">не из списка видов</span>'
           : `<div style="display:flex;gap:6px;flex-wrap:wrap"><input class="input" list="kindCodes" placeholder="Код вида" style="width:180px" data-attr-input="${r.id}" value="${esc(r.candidates[0] || '')}">
