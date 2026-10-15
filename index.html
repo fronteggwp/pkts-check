@@ -1287,9 +1287,39 @@ const DB = (() => {
   const ignored = name => !!(name && S.flags.get(name) && S.flags.get(name).ignored);
   // ошибки прогона; «не трогать» — только отметка для разработчика: ошибки считаются, ign — сколько из них в таких алгоритмах
   function effErrors(r) {
-    if (Array.isArray(r.ownErrAlgs)) { const l = r.ownErrAlgs; return { eff: l.length, ign: l.filter(a => ignored(a)).length, algs: [...new Set(l.filter(Boolean))] }; }
-    if (!r.errAlgs) return { eff: r.errorCount, ign: 0, algs: [] };   // старые записи без списка алгоритмов
-    return { eff: r.errAlgs.length, ign: r.errAlgs.filter(a => ignored(a)).length, algs: [...new Set(r.errAlgs.filter(Boolean))] };
+    if (Array.isArray(r.ownErrAlgs) || r.errAlgs) {
+      const all = Array.isArray(r.ownErrAlgs) ? r.ownErrAlgs : r.errAlgs;
+      const stale = [...new Set(all.filter(a => staleErr(r, a)))];   // та же версия раньше прошла на этом документе — ошибка не считается
+      const l = stale.length ? all.filter(a => !stale.includes(a)) : all;
+      return { eff: l.length, ign: l.filter(a => ignored(a)).length, algs: [...new Set(l.filter(Boolean))], stale };
+    }
+    return { eff: r.errorCount, ign: 0, algs: [], stale: [] };   // старые записи без списка алгоритмов
+  }
+  // Недействительная ошибка: этот же документ (вид, GUID, набор параметров) раньше уже прошёл эту же версию алгоритма (метка
+  // [PKTS-VER]) без ошибок — значит, сбой не в алгоритме (обрыв запроса, нагрузка на базу, наш лимит времени). Без метки версии не применяется.
+  let okIdx = null, okIdxRuns = null;
+  function okIndex() {
+    if (okIdxRuns === S.runs) return okIdx;
+    okIdxRuns = S.runs; okIdx = new Map();
+    for (const r of S.runs || []) {
+      if (!r.finished || !r.algVers || !r.algNames) continue;
+      if (!r.errAlgs && r.errorCount) continue;   // старая запись: неизвестно, какой алгоритм упал
+      const bad = new Set([...(r.errAlgs || []), ...(r.ownErrAlgs || [])]);
+      const ran = new Set(r.algNames);
+      const unit = (r.kindCode || '') + '|' + unitKey(r.guid, r.ps);
+      const t = ts(r.startAt);
+      for (const [a, v] of Object.entries(r.algVers)) {
+        if (!v || bad.has(a) || !ran.has(a)) continue;
+        const k = unit + '|' + a + '|' + v;
+        if (!okIdx.has(k) || okIdx.get(k) > t) okIdx.set(k, t);
+      }
+    }
+    return okIdx;
+  }
+  function staleErr(r, a) {
+    if (!a || !r || !r.startAt || !r.kindCode || !r.algVers || !r.algVers[a]) return false;
+    const t = okIndex().get((r.kindCode || '') + '|' + unitKey(r.guid, r.ps) + '|' + a + '|' + r.algVers[a]);
+    return t != null && t < ts(r.startAt);
   }
   const SLOW_SEC = 300;   // «медленный» — алгоритм дольше 5 минут
   // ---- версии алгоритмов. Номер N в базе = метка «0.N» в алгоритме ([PKTS-VER 0.N] — первая строка Run в протоколе).
@@ -2681,7 +2711,9 @@ const DB = (() => {
     const ign = ignored(e.alg);
     const fx = e.alg && !ign ? algFix(e.alg, run) : null;
     const rv = e.alg && run && run.algVers ? run.algVers[e.alg] : null;
-    const tags = (rv ? `<span class="pill plain small" title="версия алгоритма в этом прогоне (метка [PKTS-VER])">версия ${esc(rv)}</span>` : '')
+    const stale = e.alg && !isSrvErr(e, run) && staleErr(run, e.alg);
+    const tags = (stale ? `<span class="pill plain small" title="Эта же версия алгоритма раньше прошла на этом документе с теми же параметрами без ошибок — сбой не в алгоритме (обрыв запроса, нагрузка на базу). В статус не считается.">недействительна — раньше на этой версии прошло</span>` : '')
+      + (rv ? `<span class="pill plain small" title="версия алгоритма в этом прогоне (метка [PKTS-VER])">версия ${esc(rv)}</span>` : '')
       + (ign ? '<span class="pill ign small">не трогать</span>' : '')
       + (fx === 'deployed' ? '<span class="pill fixd small">исправлено — перепрогнать</span>' : fx === 'pending' ? '<span class="pill fixp small">исправлено, ждёт выкладки</span>' : '');
     return `<div class="errbox ${ign ? 'ign' : ''}"><div class="a">${esc(e.alg || 'Документ')}${tags ? `<span class="tags">${tags}</span>` : ''}</div><div style="margin-top:3px">${esc(e.message)}</div>
