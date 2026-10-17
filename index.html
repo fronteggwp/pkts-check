@@ -1379,6 +1379,10 @@ const DB = (() => {
   // =====================================================================================================================
   // данные
   const unitKey = (guid, ps) => (guid || '') + '|' + (ps || '');
+  // аналитический отчёт с наборами параметров (у гуида несколько экземпляров), а пакет JSON прогона на сайте не найден (правился /
+  // собран вручную): в протоколе сервера набора нет — какой из наборов выполнялся, неизвестно. Такой прогон не засчитывается ни
+  // этапу 1, ни конкретному набору этапа 2 — отдельная строка «набор неизвестен». У сводных и паспортов гуид уникален — им не нужно.
+  const psUnknown = r => !!r.guid && !r.ps && !r.batchId && !!S.psGuids && S.psGuids.has(String(r.guid).toLowerCase());
 
   function docState(list) {
     const fins = list.filter(r => r.finished);
@@ -1424,6 +1428,7 @@ const DB = (() => {
     S.uploadsList = uploads;
     S.runs = runs;
     S.instances = instances;
+    S.psGuids = new Set(instances.filter(x => x.ps).map(x => String(x.guid).toLowerCase()));
     S.flags = new Map(meta.flags.map(f => [f.name, f]));
     S.deploys = meta.deploys.slice().sort((a, b) => b.id - a.id);
     S.deployById = new Map(meta.deploys.map(d => [d.id, d]));
@@ -1448,7 +1453,7 @@ const DB = (() => {
     const cmp = (a, b) => ts(a.startAt) - ts(b.startAt) || a.uploadId - b.uploadId || a.id - b.id;
     const byUnit = new Map();
     const push = (key, r) => { if (!byUnit.has(key)) byUnit.set(key, []); byUnit.get(key).push(r); };
-    for (const r of runs) if (r.kindCode) push(r.guid ? unitKey(r.guid, r.ps) : 'k:' + r.kindCode, r);
+    for (const r of runs) if (r.kindCode) push(psUnknown(r) ? 'u:' + r.kindCode : r.guid ? unitKey(r.guid, r.ps) : 'k:' + r.kindCode, r);
     byUnit.forEach(l => l.sort(cmp));
     const instByKind = new Map();
     for (const x of instances) { if (!instByKind.has(x.kindCode)) instByKind.set(x.kindCode, []); instByKind.get(x.kindCode).push(x); }
@@ -1461,13 +1466,15 @@ const DB = (() => {
       if (s1.sec != null) secs.push(s1.sec);
       const docs2 = (instByKind.get(k.code) || []).sort((a, b) => a.ord - b.ord)
         .map(x => ({ ...x, st: docState(byUnit.get(unitKey(x.guid, x.ps)) || []) }));
+      const lu = byUnit.get('u:' + k.code) || [];   // прогоны с неизвестным набором
+      const unk = lu.length ? { guids: [...new Set(lu.map(r => r.guid))], runs: lu.length, st: docState(lu) } : null;
       return {
         ...k, algCount: k.algorithms.length, s1,
         status: l1.length ? s1.status : (k.guid ? 'pending' : 'noinstance'),
         lastRunAt: s1.lastRunAt, docSec: s1.sec, errors: s1.errors, srv: s1.srv, ignored: s1.ignored, fix: s1.fix, perf: s1.perf,
         warnings: s1.fin ? s1.fin.warnings : 0, runs: l1.length, finRunId: s1.fin ? s1.fin.id : null,
         firstDoneAt: s1.firstDoneAt, running: s1.running,
-        docs2, s2: agg2(docs2),
+        docs2, s2: agg2(docs2), unk,
       };
     });
     S.avgDocSec = secs.length ? secs.reduce((a, b) => a + b, 0) / secs.length : null;
@@ -2734,6 +2741,7 @@ const DB = (() => {
     const docs = [];
     if (k.guid || k.s1.last) docs.push({ stage: 1, guid: k.guid, ps: k.ps || '', st: k.s1 });
     k.docs2.forEach(d => docs.push({ stage: 2, guid: d.guid, ps: d.ps, st: d.st }));
+    if (k.unk) docs.push({ stage: 2, unknown: true, guid: k.unk.guids.join(', '), ps: '', st: k.unk.st, runs: k.unk.runs });
     const finOf = d => d.st.fin ? full.get(d.st.fin.id) || d.st.fin : null;
     const lastFin = finOf(docs[0] || { st: k.s1 });
     const last = k.s1.last ? full.get(k.s1.last.id) || k.s1.last : null;
@@ -2753,7 +2761,7 @@ const DB = (() => {
     const pos = S.nav.indexOf(k.code);
     const tab = S.tab;
     const tb = (id, label, n, err, srv) => `<button class="${tab === id ? 'on' : ''}" data-act="tab" data-tab="${id}">${label}${n != null ? `<span class="n ${err && n ? 'err' : ''}">${n}</span>` : ''}${srv ? `<span class="n srv" title="серверные проблемы">${srv}</span>` : ''}</button>`;
-    const docLabel = d => `${d.stage === 2 ? '<span class="stage-chip">этап 2</span>' : '<span class="pill plain small">этап 1</span>'} <span class="mono copy" data-act="copy" data-text="${esc(d.guid || '')}" title="Скопировать GUID">${esc(d.guid || 'без GUID')}</span>${d.ps ? ` <span class="pill plain small">${esc(psLabel(d.ps))}</span>` : ''}`;
+    const docLabel = d => `${d.stage === 2 ? '<span class="stage-chip">этап 2</span>' : '<span class="pill plain small">этап 1</span>'} <span class="mono copy" data-act="copy" data-text="${esc(d.guid || '')}" title="Скопировать GUID">${esc(d.guid || 'без GUID')}</span>${d.ps ? ` <span class="pill plain small">${esc(psLabel(d.ps))}</span>` : ''}${d.unknown ? ` <span class="pill fixp small" title="пакет JSON прогона на сайте не найден (правился или собран вручную), в протоколе сервера набора нет — не засчитано ни одному набору">набор неизвестен${d.runs > 1 ? ` · прогонов ${d.runs}` : ''}</span>` : ''}`;
     const rv = stage === 2 ? { st: k.review2Status, c: k.review2Comment, by: k.review2By, at: k.review2At } : { st: k.reviewStatus, c: k.reviewComment, by: k.reviewBy, at: k.reviewAt };
     let body = '';
     if (tab === 'overview') {
@@ -2982,11 +2990,14 @@ const DB = (() => {
         await DB.addEvent({
           by: S.me.login, uploadId: id,
           text: `загрузил(а) протокол «${f.name}»: выполнено ${fin}, с ошибками ${err}, прервано ${intr}` + (unknown ? `, не из списка ${unknown}` : '') + (unattributed ? `, вид не определён ${unattributed}` : '')
+            + ((n => n ? `, набор неизвестен ${n}` : '')(runs.filter(r => r.kindCode && psUnknown(r)).length))
             + (others.length ? ` (документы: ${Object.entries(owners).map(([o, n]) => `${o ? userName(o) : 'без исполнителя'} ${n}`).join(', ')})` : ''),
         });
         reports.push({
           id, fileName: f.name, batch: p.batch, summary: p.summary, docs: runs.length, finished: fin, withErrors: err, interrupted: intr, unknown, unattributed, owners,
           planned: runs.filter(r => r.batchId).length,
+          psUnknown: runs.filter(r => r.kindCode && psUnknown(r)).length,
+          psUnknownFin: runs.filter(r => r.finished && r.kindCode && psUnknown(r)).length,
           running: [...new Set(runs.filter(r => !r.finished).flatMap(r => r.running))],
           kinds: [...new Set(runs.filter(r => r.kindCode).map(r => r.kindCode))],
         });
@@ -3009,19 +3020,22 @@ const DB = (() => {
   function showReport(rep) {
     const st = pageStage('my');
     const mine = stats(myList(), st);
-    const fin = rep.reduce((a, r) => a + r.finished, 0);
+    const fin = rep.reduce((a, r) => a + r.finished - (r.psUnknownFin || 0), 0);
+    const finU = rep.reduce((a, r) => a + (r.psUnknownFin || 0), 0);
     modal('Протоколы разобраны', `
       <div class="big-ok">${donut(mine, 74, 9)}<div><b>${fin}</b> ${plural(fin, 'документ отмечен', 'документа отмечено', 'документов отмечено')} выполненными
+        ${finU ? `<div class="muted">ещё ${finU} — аналитические с неизвестным набором (JSON пакета не найден на сайте): показаны отдельно, не засчитаны</div>` : ''}
         <div class="muted">У вас осталось ${mine.remaining} ${plural(mine.remaining, 'документ', 'документа', 'документов')}${st === 2 ? ' этапа 2' : ''}${mine.toReview ? `, ждут проверки — ${mine.toReview} ${plural(mine.toReview, 'вид', 'вида', 'видов')}` : ''}</div></div></div>
       ${rep.map(r => `<div class="report">
         <div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap"><b>${esc(r.fileName)}</b>
           <span class="muted">${r.batch ? 'пакетный запуск' : 'одиночный запуск'} · ${r.docs} ${plural(r.docs, 'документ', 'документа', 'документов')}</span></div>
         ${r.summary ? `<div class="faint" style="font-size:12.5px">Сводка сервера: ${esc(r.summary)}</div>` : ''}
         <div class="nums">
-          <span class="pill ok"><i></i>выполнено ${r.finished}</span>
+          <span class="pill ok"><i></i>выполнено ${r.finished - (r.psUnknownFin || 0)}</span>
           ${r.withErrors ? `<span class="pill errors"><i></i>из них с ошибками ${r.withErrors}</span>` : ''}
           ${r.interrupted ? `<span class="pill interrupted"><i></i>прервано ${r.interrupted}</span>` : ''}
           ${r.unknown ? `<span class="pill pending"><i></i>не из списка видов ${r.unknown}</span>` : ''}
+          ${r.psUnknown ? `<span class="pill fixp" title="аналитические отчёты: пакет JSON не найден на сайте (правился?), набор параметров неизвестен — показаны отдельно, ни одному набору не засчитаны"><i></i>набор неизвестен ${r.psUnknown}</span>` : ''}
           ${r.unattributed ? `<span class="pill interrupted"><i></i>вид не определён ${r.unattributed}</span> <a href="#" data-act="openUpload" data-id="${r.id}">указать вручную →</a>` : ''}
         </div>
         ${Object.keys(r.owners).some(o => o !== S.me.login) ? `<div class="faint" style="font-size:12.5px;margin-top:8px">Отмечено у владельцев видов:</div>${ownersLine(r.owners)}` : ''}
