@@ -1218,7 +1218,7 @@ const DB = (() => {
   const isObserver = () => !!S.me && S.me.role === 'observer';
   const teamOf = users => users.filter(u => u.role !== 'observer');
   const WRITE_ACTS = new Set(['aflag', 'attribute', 'unattribute', 'bulkAssign', 'bulkClear', 'delUpload', 'deploy', 'pickFiles', 'review', 'reassign',
-    'startReview', 'autoNext', 'dlErrors', 'dlFull', 'dlPerf', 'dlRemaining', 'dlRemainingErr']);
+    'startReview', 'autoNext', 'dlErrors', 'dlFull', 'dlPerf', 'dlRemaining', 'dlRemainingErr', 'dlServer', 'dlAllServer']);
   const shortGuid = g => g ? g.slice(0, 8) + '…' : '';
   const psLabel = ps => ps ? `набор ${ps}` : 'BatchRun';
 
@@ -1546,6 +1546,7 @@ const DB = (() => {
       ? mine.flatMap(k => k.docs2.map(d => ({ kind: k.code, doctype: d.doctype, guid: d.guid, ps: d.ps, st: d.st })))
       : mine.filter(k => k.guid).map(k => ({ kind: k.code, doctype: k.doctype, guid: k.guid, ps: k.ps || '', st: k.s1 }));
   }
+  const serverDocs = (login, stage) => docsOf(login, stage).filter(d => d.st.status === 'server');   // серверные проблемы
   const remainingDocs = (login, stage) => docsOf(login, stage).filter(d => d.st.status === 'pending' || d.st.status === 'interrupted');
   // остаток + документы, где были ошибки (все, независимо от исправления/выкладки)
   const remainingErrDocs = (login, stage) => docsOf(login, stage).filter(d => d.st.status === 'pending' || d.st.status === 'interrupted' || d.st.status === 'errors');
@@ -2025,6 +2026,7 @@ const DB = (() => {
           <button class="btn" data-act="dlRemaining" data-login="${esc(login)}" data-st="${stage}" ${n ? '' : 'disabled'}>${I.dl}JSON остатка</button>
           <button class="btn" data-act="dlRemainingErr" data-login="${esc(login)}" data-st="${stage}" ${nRE ? '' : 'disabled'} title="Невыполненные и прерванные документы плюс все документы, в которых были ошибки">${I.dl}остаток + ошибочные${nRE ? ` (${nRE})` : ''}</button>
           <button class="btn" data-act="dlErrors" data-login="${esc(login)}" data-st="${stage}" ${ed.ready.length ? '' : 'disabled'} title="Перепрогон документов, у которых алгоритмы с ошибками исправлены и выложены на сервер">${I.rerun}JSON с ошибками${ed.ready.length ? ` (${ed.ready.length})` : ''}</button>
+          ${(() => { const sd = serverDocs(login, stage).length; return `<button class="btn" data-act="dlServer" data-login="${esc(login)}" data-st="${stage}" ${sd ? '' : 'disabled'} title="Документы, последний прогон которых прошёл без наших ошибок, но с серверной проблемой (не задан параметр, проверка данных, подписанты, обрыв соединения) — запустить ещё раз">${I.rerun}JSON с серверными проблемами${sd ? ` (${sd})` : ''}</button>`; })()}
           <button class="btn" data-act="dlPerf" data-login="${esc(login)}" data-st="${stage}" ${pd.ready.length ? '' : 'disabled'} title="Перепроверка документов, где выполнялись оптимизированные и уже выложенные алгоритмы">${I.rerun}JSON с оптимизированными${pd.ready.length ? ` (${pd.ready.length})` : ''}</button>
           <button class="btn small ghost" data-act="dlFull" data-login="${esc(login)}" data-st="${stage}" title="Все назначенные документы этапа">полный JSON</button>
           <button class="btn small ghost" data-act="dlCsv" data-login="${esc(login)}">таблица CSV</button>
@@ -2206,6 +2208,8 @@ const DB = (() => {
           <span class="muted">не выполнялись: ${pf.pending.length} · с ошибками, исправлены и выложены, прогон &lt; 5 мин: ${pf.fixed.length}</span>
           ${(() => { const fx = docsOfKinds(scope, f.stage).filter(d => d.st.status === 'errors' && d.st.fix === 'deployed');
             return `<button class="btn" data-act="dlAllFixed" data-st="${f.stage}" ${fx.length ? '' : 'disabled'} title="Все документы с нашими ошибками, исправление которых уже выложено на сервер — без ограничения по времени прогона; порядок — от быстрых к долгим, тяжёлые в конце">${I.rerun}JSON: все исправленные с ошибками (${fx.length})</button>`; })()}
+          ${(() => { const sv = docsOfKinds(scope, f.stage).filter(d => d.st.status === 'server');
+            return `<button class="btn" data-act="dlAllServer" data-st="${f.stage}" ${sv.length ? '' : 'disabled'} title="Документы, последний прогон которых прошёл без наших ошибок, но с серверной проблемой (не задан параметр, проверка данных, подписанты, обрыв соединения) — запустить ещё раз">${I.rerun}JSON: серверные проблемы (${sv.length})</button>`; })()}
           <button class="btn smart-btn" style="margin-left:auto" data-act="smart" data-all="1" data-login="${esc(S.me.login)}" data-st="${f.stage}" title="Видов на странице: все с ошибками, не выполнявшиеся, прерванные, медленные и оптимизированные — от быстрых к медленным, тяжёлые в конце"><span class="spark">✦</span>Умная выгрузка JSON<span class="smart-tag">все виды</span></button>
         </div>`;
       })()}
@@ -3284,6 +3288,20 @@ const DB = (() => {
         const fx = docsOfKinds(scopeAll(), st).filter(d => d.st.status === 'errors' && d.st.fix === 'deployed');
         if (!fx.length) { toast('Нечего запускать: исправленных и выложенных документов с ошибками нет'); break; }
         await downloadBatch(S.f.all.who, st, await orderByEstimate(fx, st), 'исправленные_с_ошибками', true);   // от быстрых к долгим
+        break;
+      }
+      case 'dlServer': {
+        const st = +t.dataset.st || 1;
+        const sd = serverDocs(t.dataset.login, st);
+        if (!sd.length) { toast('Документов с серверными проблемами нет'); break; }
+        await downloadBatch(t.dataset.login, st, sd, 'серверные_проблемы');
+        break;
+      }
+      case 'dlAllServer': {
+        const st = +t.dataset.st || 1;
+        const sv = docsOfKinds(scopeAll(), st).filter(d => d.st.status === 'server');
+        if (!sv.length) { toast('Документов с серверными проблемами нет'); break; }
+        await downloadBatch(S.f.all.who, st, sv, 'серверные_проблемы');
         break;
       }
       case 'dlAllPendFix': {
