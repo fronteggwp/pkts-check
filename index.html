@@ -1137,8 +1137,9 @@ const DB = (() => {
       all: { q: '', status: 'all', type: 'all', who: 'all', stage: 1 },
       algs: { q: '', mode: 'all' },
       sec: { q: '', mode: 'all', check: true, type: 'all', lim: 300 },
+      hl: { q: '', mode: 'all', site: true, lim: 400 },
     },
-    sort: { my: { key: 'status', dir: 1 }, all: { key: 'code', dir: 1 }, algs: { key: 'totalSec', dir: -1 } },
+    sort: { my: { key: 'status', dir: 1 }, all: { key: 'code', dir: 1 }, algs: { key: 'totalSec', dir: -1 }, hl: { key: 'st', dir: 1 } },
     selected: new Set(), menu: false, uploading: false, algs: null, sections: null,
   };
 
@@ -1870,7 +1871,7 @@ const DB = (() => {
 
   function route() {
     const parts = location.hash.replace(/^#\/?/, '').split('/');
-    S.route = ['my', 'all', 'team', 'uploads', 'algs', 'sections'].includes(parts[0]) ? parts[0] : 'my';
+    S.route = ['my', 'all', 'team', 'uploads', 'algs', 'health', 'sections'].includes(parts[0]) ? parts[0] : 'my';
     if (S.route === 'my' && isObserver()) S.route = 'all';
     const kind = parts[1] === 'k' && parts[2] ? decodeURIComponent(parts[2]) : null;
     const pageChanged = !$('#page') || $('#page').dataset.route !== S.route;
@@ -1906,6 +1907,7 @@ const DB = (() => {
           ${tab('team', 'Команда')}
           ${tab('uploads', 'Протоколы', S.uploadsList.length)}
           ${tab('algs', 'Алгоритмы', isDev() && S.pendingVers.length ? S.pendingVers.length : 0)}
+          ${tab('health', 'Работоспособность')}
           ${tab('sections', 'Секции')}
         </nav>
         <button class="btn ghost icon hide-sm" data-act="refresh" title="Обновить данные">${I.refresh}</button>
@@ -1931,6 +1933,7 @@ const DB = (() => {
     else if (S.route === 'team') { p.innerHTML = pageTeam(); loadEvents(); }
     else if (S.route === 'uploads') p.innerHTML = pageUploads();
     else if (S.route === 'algs') { p.innerHTML = pageAlgs(); loadAlgs(); }
+    else if (S.route === 'health') { p.innerHTML = pageHealth(); renderHealth(); }
     else if (S.route === 'sections') { p.innerHTML = pageSections(); loadSectionsPage(); }
     bindDrops();
   }
@@ -2683,6 +2686,132 @@ const DB = (() => {
         <span style="opacity:.75;font-size:12.5px">отметка для разработчика: статусы не меняются, в выгрузку ошибок и медленных такие алгоритмы не попадают</span></div>` : ''}`;
   }
 
+
+  // =====================================================================================================================
+  // работоспособность алгоритмов: по ВСЕМ загруженным прогонам (любой документ, любые параметры, любая версия)
+  //  ok     — хоть раз завершился без ошибки;
+  //  bad    — ни разу без ошибки, были наши ошибки;
+  //  srv    — ни разу без ошибки, все ошибки — серверные проблемы (параметры, проверка данных, подписанты, обрыв соединения);
+  //  broken — запускался, но каждый раз обрывался вместе с документом (или старые записи без списка ошибок);
+  //  never  — есть в st5 / у видов сайта, но ни в одном протоколе не встречался.
+  const HL = {
+    ok: { label: 'Работает', pill: 'ok', col: 'var(--ok)' },
+    bad: { label: 'Не работает', pill: 'errors', col: 'var(--err)' },
+    srv: { label: 'Только серверные проблемы', pill: 'srvp', col: 'var(--int)' },
+    broken: { label: 'Не завершался', pill: 'plain', col: 'var(--int)' },
+    never: { label: 'Не запускался', pill: 'plain', col: 'var(--faint)' },
+  };
+  const HL_ORDER = { bad: 0, srv: 1, broken: 2, never: 3, ok: 4 };
+  let hlCache = null;
+  function healthStats() {
+    if (hlCache && hlCache.runs === S.runs && hlCache.kinds === S.kinds && hlCache.vers === S.versions) return hlCache.list;
+    const acc = new Map();
+    const get = n => { const k = n.toLowerCase(); let x = acc.get(k); if (!x) acc.set(k, x = { name: n, runs: 0, ok: 0, own: 0, srv: 0, broken: 0, lastOk: 0, lastRun: 0, kinds: new Set(), okKinds: new Set(), siteKinds: new Set() }); return x; };
+    S.versions.forEach((v, n) => { get(n); });   // исправленные — даже без видов на сайте
+    S.kinds.forEach(k => [...(k.algorithms || []), ...(k.linkAlgs || [])].forEach(a => get(a).siteKinds.add(k.code)));
+    for (const r of S.runs) {
+      const names = [...new Set(r.algNames || [])];
+      if (!names.length) continue;
+      const errs = r.errAlgs;   // null — старая запись без списка алгоритмов с ошибками
+      const own = r.ownErrAlgs;
+      const srvSet = new Set((r.srvProblems || []).filter(p => p.kind === 'error').map(p => p.alg || ''));
+      const running = new Set(r.running || []);
+      const t = ts(r.startAt) || 0;
+      for (const n of names) {
+        const x = get(n);
+        x.runs++;
+        if (r.kindCode) x.kinds.add(r.kindCode);
+        if (t > x.lastRun) x.lastRun = t;
+        if (errs === null) { x.broken++; continue; }
+        if (errs.includes(n)) {
+          if (own ? own.includes(n) : !srvSet.has(n)) x.own++; else x.srv++;
+        } else if (!r.finished && running.has(n)) x.broken++;
+        else { x.ok++; if (r.kindCode) x.okKinds.add(r.kindCode); if (t > x.lastOk) x.lastOk = t; }
+      }
+    }
+    const list = [...acc.values()].map(x => ({
+      ...x, kinds: [...new Set([...x.kinds, ...x.siteKinds])].sort(), okKinds: [...x.okKinds], onSite: x.siteKinds.size > 0 || x.runs > 0,
+      st: x.ok ? 'ok' : x.own ? 'bad' : x.srv ? 'srv' : x.broken ? 'broken' : 'never',
+    }));
+    list.forEach(x => { x.stOrd = HL_ORDER[x.st]; });
+    hlCache = { runs: S.runs, kinds: S.kinds, vers: S.versions, list };
+    return list;
+  }
+
+  function pageHealth() {
+    const f = S.f.hl;
+    return `
+      <div class="page-title"><h1>Работоспособность алгоритмов</h1><span class="sub">по всем загруженным протоколам — любой документ, любые параметры: хоть раз отработал без ошибок — «работает»</span></div>
+      <div id="hlTop"></div>
+      <div class="toolbar"><div class="search">${I.search}<input class="input" id="q-health" data-act="hq" placeholder="Алгоритм или код группы" value="${esc(f.q)}"><kbd class="hide-sm">/</kbd></div>
+        <label class="check" style="font-size:13px" title="Только алгоритмы, которые есть у видов сайта или встречались в протоколах (без алгоритмов видов, которые сейчас не проверяем)"><input type="checkbox" data-act="hsite" ${f.site ? 'checked' : ''}> только алгоритмы видов сайта</label>
+        <span class="muted" id="hlSum"></span></div>
+      <div id="hlTbl"></div>`;
+  }
+
+  function renderHealth() {
+    const top = $('#hlTop'), tbl = $('#hlTbl');
+    if (!top || !tbl) return;
+    const f = S.f.hl;
+    const all = healthStats().filter(x => !f.site || x.onSite);
+    const cnt = st => all.filter(x => x.st === st).length;
+    const notOk = all.length - cnt('ok');
+    const pct = n => all.length ? Math.round(n * 1000 / all.length) / 10 : 0;
+    const kpi = (l, v, sub, col, mode) => `<div class="kpi ${mode ? 'click' : ''} ${f.mode === mode ? 'on' : ''}" ${mode ? `data-act="hmode" data-key="${mode}"` : ''}><div class="l">${l}</div><div class="v"${col ? ` style="color:${col}"` : ''}>${v}</div>${sub ? `<div class="s">${sub}</div>` : ''}</div>`;
+    top.innerHTML = `<div class="kpis">
+        ${kpi('Алгоритмов', all.length, f.site ? 'видов сайта и протоколов' : 'с исправленными без видов на сайте', '', 'all')}
+        ${kpi('Работают', cnt('ok'), `${pct(cnt('ok'))}% · хоть раз без ошибок`, 'var(--ok)', 'ok')}
+        ${kpi('Ни разу не отработали', notOk, `${pct(notOk)}% · осталось`, notOk ? 'var(--err)' : '', 'notok')}
+        ${kpi('Не работают', cnt('bad'), 'наши ошибки', cnt('bad') ? 'var(--err)' : '', 'bad')}
+        ${kpi('Только серверные', cnt('srv'), 'параметры, данные, подписанты, обрыв', cnt('srv') ? 'var(--int)' : '', 'srv')}
+        ${kpi('Не завершались', cnt('broken'), 'обрывались вместе с документом', '', 'broken')}
+        ${kpi('Не запускались', cnt('never'), 'нет в протоколах', '', 'never')}
+      </div>`;
+    const q = f.q.trim().toLowerCase();
+    const s = S.sort.hl;
+    const list = all.filter(x => (f.mode === 'all' || (f.mode === 'notok' ? x.st !== 'ok' : x.st === f.mode))
+      && (!q || x.name.toLowerCase().includes(q) || algGroups(x.name).some(g => g.toLowerCase().includes(q))))
+      .sort((a, b) => {
+        const k = s.key === 'st' ? 'stOrd' : s.key;
+        const va = k === 'kinds' ? a.kinds.length : a[k], vb = k === 'kinds' ? b.kinds.length : b[k];
+        return ((va < vb ? -1 : va > vb ? 1 : 0) * s.dir) || a.name.localeCompare(b.name);
+      });
+    $('#hlSum').textContent = `показано ${Math.min(list.length, f.lim)} из ${list.length}`;
+    if (!list.length) { tbl.innerHTML = '<div class="card"><div class="empty"><div class="ico">🔎</div>Ничего не найдено</div></div>'; return; }
+    const th = (key, label, cls = '') => `<th class="${cls}" data-act="hsort" data-key="${key}">${label}${s.key === key ? `<span class="arr">${s.dir > 0 ? '↑' : '↓'}</span>` : ''}</th>`;
+    const n = (v, col) => v ? `<span style="${col ? `color:${col};font-weight:600` : ''}">${v}</span>` : '<span class="faint">0</span>';
+    const verCell = x => {
+      const v = verInfo(x.name);
+      if (!v || !(v.available > 1)) return '<span class="faint">—</span>';
+      const after = v.last && v.last.at && ts(v.last.at) > (x.lastRun || 0);
+      return `<span class="pill ${v.pending ? 'fixp' : 'fixd'} small" title="${esc(v.notes || '')}">${verLabel(v.available)}${v.pending ? ' · ждёт выкладки' : after ? ' · не проверена' : ''}</span>`;
+    };
+    tbl.innerHTML = `<div class="card table-wrap"><table class="t"><thead><tr>
+      ${th('name', 'Алгоритм')}${th('st', 'Статус')}${th('runs', 'Прогонов', 'num')}${th('ok', 'Без ошибок', 'num')}${th('own', 'Наши ошибки', 'num')}
+      ${th('srv', 'Серверные', 'num')}${th('broken', 'Обрыв', 'num')}${th('lastOk', 'Последний успешный')}${th('kinds', 'Видов', 'num')}<th class="nosort">Версия</th></tr></thead>
+      <tbody>${list.slice(0, f.lim).map(x => `<tr data-halg="${esc(x.name)}">
+        <td class="mono">${esc(x.name)}${ignored(x.name) ? ' <span class="pill ign small">не трогать</span>' : ''}${algGrpLine(x.name)}</td>
+        <td class="nowrap"><span class="pill ${HL[x.st].pill} small">${HL[x.st].label}</span></td>
+        <td class="num">${n(x.runs)}</td><td class="num">${n(x.ok, 'var(--ok)')}</td><td class="num">${n(x.own, 'var(--err)')}</td>
+        <td class="num">${n(x.srv, 'var(--int)')}</td><td class="num">${n(x.broken)}</td>
+        <td class="nowrap">${x.lastOk ? fmtDT(new Date(x.lastOk).toISOString(), true) : '<span class="faint">—</span>'}</td>
+        <td class="num">${x.kinds.length}</td><td class="nowrap">${verCell(x)}</td></tr>`).join('')}</tbody></table></div>
+      ${list.length > f.lim ? `<div style="text-align:center;margin:12px 0"><button class="btn small" data-act="hmore">Показать ещё (${list.length - f.lim})</button></div>` : ''}`;
+  }
+
+  function healthModal(name) {
+    const x = healthStats().find(a => a.name === name);
+    if (!x) return;
+    const ok = new Set(x.okKinds);
+    modal(`<span class="mono" style="font-size:15px">${esc(x.name)}</span>`, `<div class="meta-grid" style="margin-bottom:14px">
+        <div class="mg"><div class="l">Статус</div><div class="v" style="color:${HL[x.st].col}">${HL[x.st].label}</div></div>
+        <div class="mg"><div class="l">Прогонов</div><div class="v">${x.runs}</div></div>
+        <div class="mg"><div class="l">Без ошибок</div><div class="v">${x.ok}</div></div>
+        <div class="mg"><div class="l">Наши ошибки / серверные / обрыв</div><div class="v">${x.own} / ${x.srv} / ${x.broken}</div></div>
+        <div class="mg"><div class="l">Последний успешный</div><div class="v">${x.lastOk ? fmtDT(new Date(x.lastOk).toISOString(), true) : '—'}</div></div></div>
+      <div class="section"><h4>Виды</h4>` + (x.kinds.length ? x.kinds.map(c => { const k = kindByCode(c); return `<div style="display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)"><div><a href="#/health/k/${encodeURIComponent(c)}" class="mono">${esc(c)}</a> <span class="muted">${esc(k ? k.name : '')}</span></div>${ok.has(c) ? '<span class="pill ok small">отработал</span>' : '<span class="pill plain small">без успешного прогона</span>'}</div>`; }).join('') : '<div class="muted">Видов на сайте нет</div>') + '</div>');
+  }
+
   // =====================================================================================================================
   // карточка вида
   function closeDrawer(silent) {
@@ -3150,6 +3279,8 @@ const DB = (() => {
       if (ur) { openUpload(+ur.dataset.upload); return; }
       const ar = e.target.closest('tr[data-alg]');
       if (ar && S.algs) { const a = S.algs.find(x => x.name === ar.dataset.alg); if (a) algModal(a); }
+      const hr = e.target.closest('tr[data-halg]');
+      if (hr) healthModal(hr.dataset.halg);
       return;
     }
     if (t.tagName === 'A') e.preventDefault();
@@ -3209,6 +3340,9 @@ const DB = (() => {
         break;
       }
       case 'amode': S.f.algs.mode = t.dataset.key; renderAlgs(); break;
+      case 'hmode': S.f.hl.mode = S.f.hl.mode === t.dataset.key ? 'all' : t.dataset.key; S.f.hl.lim = 400; renderHealth(); break;
+      case 'hmore': S.f.hl.lim += 400; renderHealth(); break;
+      case 'hsort': { const s = S.sort.hl; if (s.key === t.dataset.key) s.dir = -s.dir; else { s.key = t.dataset.key; s.dir = ['runs', 'ok', 'own', 'srv', 'broken', 'lastOk', 'kinds'].includes(s.key) ? -1 : 1; } renderHealth(); break; }
       case 'smode': S.f.sec.mode = S.f.sec.mode === t.dataset.key && t.classList.contains('kpi') ? 'all' : t.dataset.key; S.f.sec.lim = 300; renderSections(); break;
       case 'smore': S.f.sec.lim += 500; renderSections(); break;
       case 'secKind': e.preventDefault(); if (!kindByCode(t.dataset.kind)) { toast('Вида ' + t.dataset.kind + ' нет на сайте', true); break; } S.tab = 'sections'; go(S.route === 'sections' ? 'sections' : S.route, t.dataset.kind); break;
@@ -3412,6 +3546,7 @@ const DB = (() => {
     const t = e.target;
     if (t.dataset.act === 'q') { S.f[t.dataset.page].q = t.value; refreshTable(t.dataset.page); }
     else if (t.dataset.act === 'aq') { S.f.algs.q = t.value; renderAlgs(); }
+    else if (t.dataset.act === 'hq') { S.f.hl.q = t.value; S.f.hl.lim = 400; renderHealth(); }
     else if (t.dataset.act === 'sq') { S.f.sec.q = t.value; S.f.sec.lim = 300; renderSections(); }
   });
 
@@ -3420,6 +3555,7 @@ const DB = (() => {
     if (t.dataset.act === 'type') { S.f[t.dataset.page].type = t.value; renderPage(); }
     else if (t.dataset.act === 'who') { S.f.all.who = t.value; S.selected.clear(); renderPage(); }
     else if (t.dataset.act === 'autoNext') setPref('autoNext', t.checked ? '1' : '0');
+    else if (t.dataset.act === 'hsite') { S.f.hl.site = t.checked; S.f.hl.lim = 400; renderHealth(); }
     else if (t.dataset.act === 'stype') { S.f.sec.type = t.value; S.f.sec.lim = 300; renderSections(); }
     else if (t.dataset.act === 'scheck') { S.f.sec.check = t.checked; S.f.sec.lim = 300; renderSections(); }
     else if (t.dataset.act === 'smartOpt' && S.smart) { S.smart[t.dataset.k] = t.type === 'checkbox' ? t.checked : t.value; renderSmart(); }
