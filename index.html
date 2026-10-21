@@ -402,6 +402,8 @@ table.t td.num, table.t th.num { text-align: right; font-variant-numeric: tabula
 .stagebar .seg button:disabled { opacity: .55; cursor: not-allowed; }
 .stagebar .hint { color: var(--muted); font-size: 13px; }
 .stage-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 20px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); color: #fff; font-size: 12px; font-weight: 700; }
+.stage-chip.spec { background: linear-gradient(90deg, #d9480f, #e8590c); }   /* спец. этап */
+.stagebar .seg button.spec.on { color: #c2410c; }
 .mini-progress { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .mini-progress .progress { width: 70px; height: 5px; margin: 0; }
 .deploy-card { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; padding: 16px 20px; margin-bottom: 16px; border: 1px solid color-mix(in srgb, var(--int) 35%, var(--border)); background: linear-gradient(135deg, var(--int-soft), var(--surface) 70%); }
@@ -786,6 +788,7 @@ const DB = (() => {
     guid: r.guid, ps: r.ps || '', assignee: r.assignee, algorithms: r.algorithms || [], linkAlgs: r.link_algs || [],   // ps — набор параметров первого этапа ('' — BatchRun)
     reviewStatus: r.review_status, reviewComment: r.review_comment, reviewBy: r.review_by, reviewAt: r.review_at,
     review2Status: r.review2_status, review2Comment: r.review2_comment, review2By: r.review2_by, review2At: r.review2_at,
+    review3Status: r.review3_status, review3Comment: r.review3_comment, review3By: r.review3_by, review3At: r.review3_at,   // спец. этап
   });
   const errAlgsOf = errors => (errors || []).map(e => e.alg || '');
   // наши ошибки и серверные проблемы (не задан параметр, проверка данных, подписанты, обрыв соединения…) — по LogParser.srvError/srvWarn
@@ -916,6 +919,16 @@ const DB = (() => {
       return (await this.page(() => this.sb.from('instances').select('id,kind_code,guid,ps,doctype,stage,ord').order('id')))
         .map(r => ({ id: r.id, kindCode: r.kind_code, guid: r.guid, ps: r.ps || '', doctype: r.doctype, stage: r.stage, ord: r.ord }));
     }
+    // спец. этап (активный): документы со своим исполнителем и набором; прогоны засчитываются с started_at
+    async special() {
+      let st;
+      try { st = chk(await this.sb.from('special_stages').select('*').eq('active', true).order('id', { ascending: false }).limit(1)); }
+      catch (e) { console.warn('special', e); return null; }   // таблицы ещё нет — этапа нет
+      if (!st.length) return null;
+      const docs = await this.page(() => this.sb.from('special_docs').select('*').eq('stage_id', st[0].id).order('ord'));
+      return { id: st[0].id, name: st[0].name, startedAt: st[0].started_at, note: st[0].note || '',
+        docs: docs.map(r => ({ id: r.id, kindCode: r.kind_code, guid: r.guid, ps: r.ps || '', doctype: r.doctype, assignee: r.assignee, source: r.source || '', note: r.note || '', ord: r.ord })) };
+    }
     // секции документов и алгоритмы, которые их заполняют (из базы ПиКТС 2.0; tools/load_sections.py)
     async sections() {
       return (await this.page(() => this.sb.from('kind_sections').select('*').order('id'))).map(sectionFromRow);
@@ -1010,7 +1023,7 @@ const DB = (() => {
       chk(await this.sb.from('doc_runs').update({ kind_code: patch.kindCode, match: patch.match }).eq('id', id));
     }
     async setReview(code, rv, stage) {
-      const p = stage === 2 ? 'review2_' : 'review_';
+      const p = stage === 3 ? 'review3_' : stage === 2 ? 'review2_' : 'review_';
       chk(await this.sb.from('kinds').update({ [p + 'status']: rv.status, [p + 'comment']: rv.comment, [p + 'by']: rv.by, [p + 'at']: rv.at }).eq('code', code));
     }
     async assign(codes, login) {
@@ -1061,6 +1074,7 @@ const DB = (() => {
     }
     async runsAlgs(ids) { return this.st.runs.filter(r => ids.includes(r.id)); }
     async instances() { return this.st.instances; }
+    async special() { return this.st.special || null; }
     async sections() {   // демо: секции — из локального sections.json рядом со страницей (если есть)
       if (this.st.sections) return this.st.sections;
       try { const r = await fetch('sections.json'); if (r.ok) return await r.json(); } catch { }
@@ -1105,7 +1119,7 @@ const DB = (() => {
     async updateRun(id, p) { const r = this.st.runs.find(x => x.id === id); if (r) { r.kindCode = p.kindCode; r.match = p.match; } this.save(); }
     async setReview(code, rv, stage) {
       const k = this.st.kinds.find(x => x.code === code);
-      const p = stage === 2 ? 'review2' : 'review';
+      const p = stage === 3 ? 'review3' : stage === 2 ? 'review2' : 'review';
       Object.assign(k, { [p + 'Status']: rv.status, [p + 'Comment']: rv.comment, [p + 'By']: rv.by, [p + 'At']: rv.at });
       this.save();
     }
@@ -1130,7 +1144,7 @@ const DB = (() => {
   // состояние
   const S = {
     me: null, users: [], kinds: [], runs: [], uploadsList: [], avgDocSec: null, sig: '',
-    instances: [], flags: new Map(), versions: new Map(), pendingVers: [], deploys: [], observed: new Map(), deployById: new Map(),
+    instances: [], special: null, flags: new Map(), versions: new Map(), pendingVers: [], deploys: [], observed: new Map(), deployById: new Map(),
     route: 'my', kindOpen: null, tab: 'overview', nav: [],
     f: {
       my: { q: '', status: 'all', type: 'all', stage: null },
@@ -1156,6 +1170,11 @@ const DB = (() => {
   // выполнен: без ошибок, с нашими ошибками или только с серверными проблемами
   const isDone = st => st === 'ok' || st === 'errors' || st === 'server';
   const PALETTE = ['#4255ff', '#e8590c', '#0ca678', '#9c36b5', '#1098ad', '#d6336c'];
+  // этапы с несколькими документами на вид: 2 — второй, 3 — спец. этап
+  const multi = st => st === 2 || st === 3;
+  const stageName = st => st === 3 ? 'спец. этап' : st === 2 ? 'этап 2' : 'этап 1';
+  const stageChip = st => st === 3 ? ' <span class="stage-chip spec">спец. этап</span>' : st === 2 ? ' <span class="stage-chip">этап 2</span>' : '';
+  const stageSfx = st => st === 3 ? '_спецэтап' : st === 2 ? '_этап2' : '';
   const STAGE2_INFO = 'паспорта и сводные — ещё до 10 других документов вида, аналитические — тот же документ со всеми его наборами параметров';
 
   // =====================================================================================================================
@@ -1423,13 +1442,15 @@ const DB = (() => {
   }
 
   async function loadState() {
-    const [users, kinds, runs, uploads, instances, meta] = await Promise.all([DB.users(), DB.kinds(), DB.runsLight(), DB.uploads(), DB.instances(), DB.algMeta()]);
+    const [users, kinds, runs, uploads, instances, meta, special] = await Promise.all([DB.users(), DB.kinds(), DB.runsLight(), DB.uploads(), DB.instances(), DB.algMeta(),
+      DB.special ? DB.special() : Promise.resolve(null)]);
     S.users = users;
     S.team = teamOf(users);
     S.uploadsList = uploads;
     S.runs = runs;
     S.instances = instances;
-    S.psGuids = new Set(instances.filter(x => x.ps).map(x => String(x.guid).toLowerCase()));
+    S.special = special && special.docs && special.docs.length ? special : null;
+    S.psGuids = new Set(instances.filter(x => x.ps).concat(S.special ? S.special.docs.filter(x => x.ps) : []).map(x => String(x.guid).toLowerCase()));
     S.flags = new Map(meta.flags.map(f => [f.name, f]));
     S.deploys = meta.deploys.slice().sort((a, b) => b.id - a.id);
     S.deployById = new Map(meta.deploys.map(d => [d.id, d]));
@@ -1458,6 +1479,10 @@ const DB = (() => {
     byUnit.forEach(l => l.sort(cmp));
     const instByKind = new Map();
     for (const x of instances) { if (!instByKind.has(x.kindCode)) instByKind.set(x.kindCode, []); instByKind.get(x.kindCode).push(x); }
+    // спец. этап: у каждого документа свой исполнитель; засчитываются только прогоны с начала этапа («все с нуля»)
+    const spByKind = new Map();
+    const sp0 = S.special ? ts(S.special.startedAt) : 0;
+    for (const x of (S.special ? S.special.docs : [])) { if (!spByKind.has(x.kindCode)) spByKind.set(x.kindCode, []); spByKind.get(x.kindCode).push(x); }
 
     const secs = [];
     S.kinds = kinds.map(k => {
@@ -1467,6 +1492,8 @@ const DB = (() => {
       if (s1.sec != null) secs.push(s1.sec);
       const docs2 = (instByKind.get(k.code) || []).sort((a, b) => a.ord - b.ord)
         .map(x => ({ ...x, st: docState(byUnit.get(unitKey(x.guid, x.ps)) || []) }));
+      const docs3 = (spByKind.get(k.code) || []).sort((a, b) => a.ord - b.ord)
+        .map(x => ({ ...x, st: docState((byUnit.get(unitKey(x.guid, x.ps)) || []).filter(r => ts(r.startAt) >= sp0)) }));
       const lu = byUnit.get('u:' + k.code) || [];   // прогоны с неизвестным набором
       const unk = lu.length ? { guids: [...new Set(lu.map(r => r.guid))], runs: lu.length, st: docState(lu) } : null;
       return {
@@ -1475,12 +1502,12 @@ const DB = (() => {
         lastRunAt: s1.lastRunAt, docSec: s1.sec, errors: s1.errors, srv: s1.srv, ignored: s1.ignored, fix: s1.fix, perf: s1.perf,
         warnings: s1.fin ? s1.fin.warnings : 0, runs: l1.length, finRunId: s1.fin ? s1.fin.id : null,
         firstDoneAt: s1.firstDoneAt, running: s1.running,
-        docs2, s2: agg2(docs2), unk,
+        docs2, s2: agg2(docs2), docs3, s3: agg2(docs3), unk,
       };
     });
     S.avgDocSec = secs.length ? secs.reduce((a, b) => a + b, 0) / secs.length : null;
     const sig = S.kinds.map(k => k.status + k.errors + (k.reviewStatus || '') + (k.review2Status || '') + (k.reviewComment || '').length + (k.assignee || '') + k.runs
-      + '/' + k.s2.done + k.s2.errSum + k.s2.interrupted).join('|') + '#' + uploads.length + '#' + meta.flags.map(f => f.name + f.ignored).join() + '#' + meta.versions.length + '#' + meta.deploys.length;
+      + '/' + k.s2.done + k.s2.errSum + k.s2.interrupted + '/' + k.s3.done + k.s3.errSum + k.s3.interrupted + (k.review3Status || '')).join('|') + '#' + uploads.length + '#' + meta.flags.map(f => f.name + f.ignored).join() + '#' + meta.versions.length + '#' + meta.deploys.length;
     const changed = sig !== S.sig;
     S.sig = sig;
     return changed;
@@ -1493,6 +1520,7 @@ const DB = (() => {
   }
   const stage2Open = login => { const x = stage1Left(login); return x.total > 0 && x.left === 0; };
   const hasStage2 = login => S.kinds.some(k => k.assignee === login && k.docs2.length);
+  const hasStage3 = login => S.kinds.some(k => k.docs3.some(d => d.assignee === login));
   function pageStage(page) {
     if (page === 'my') return S.f.my.stage || (stage2Open(S.me.login) && hasStage2(S.me.login) ? 2 : 1);
     if (page === 'all') return S.f.all.stage;
@@ -1502,6 +1530,16 @@ const DB = (() => {
 
   // строка таблицы для этапа: на втором — агрегат по экземплярам вида
   function viewOf(k, stage) {
+    if (stage === 3) {
+      const a = k.s3;
+      return {
+        ...k, assignee: (k.docs3[0] && k.docs3[0].assignee) || null,   // исполнитель документов спец. этапа (у вида они у одного человека)
+        status: a.status, errors: a.errSum, srv: a.srvSum, ignored: a.ignSum, docSec: a.secs.length ? a.secs.reduce((x, y) => x + y, 0) / a.secs.length : null,
+        lastRunAt: a.lastRunAt, running: null, progress: a,
+        fix: a.fixDeployed ? 'deployed' : a.fixPending ? 'pending' : null, perf: a.perfDeployed ? 'deployed' : null,
+        reviewStatus: k.review3Status, reviewComment: k.review3Comment, reviewBy: k.review3By, reviewAt: k.review3At,
+      };
+    }
     if (stage !== 2) return k;
     const a = k.s2;
     return {
@@ -1511,12 +1549,13 @@ const DB = (() => {
       reviewStatus: k.review2Status, reviewComment: k.review2Comment, reviewBy: k.review2By, reviewAt: k.review2At,
     };
   }
-  const viewKinds = stage => stage === 2 ? S.kinds.filter(k => k.docs2.length).map(k => viewOf(k, 2)) : S.kinds;
+  const viewKinds = stage => stage === 3 ? S.kinds.filter(k => k.docs3.length).map(k => viewOf(k, 3))
+    : stage === 2 ? S.kinds.filter(k => k.docs2.length).map(k => viewOf(k, 2)) : S.kinds;
 
   function stats(list, stage) {
     const s = { all: list.length, total: 0, ok: 0, errors: 0, server: 0, partial: 0, interrupted: 0, pending: 0, noinstance: 0, reviewed: 0, issues: 0, secs: [] };
     for (const k of list) {
-      if (stage === 2) {
+      if (multi(stage)) {
         const a = k.progress;
         s.total += a.total; s.ok += a.ok; s.errors += a.errors; s.server += a.server; s.interrupted += a.interrupted; s.pending += a.pending;
         s.secs.push(...a.secs);
@@ -1542,6 +1581,7 @@ const DB = (() => {
 
   // документы человека для пакета: этап 1 — экземпляр вида, этап 2 — экземпляры второго этапа
   function docsOf(login, stage) {
+    if (stage === 3) return S.kinds.flatMap(k => k.docs3.filter(d => d.assignee === login).map(d => ({ kind: k.code, doctype: d.doctype, guid: d.guid, ps: d.ps, st: d.st })));
     const mine = S.kinds.filter(k => k.assignee === login);
     return stage === 2
       ? mine.flatMap(k => k.docs2.map(d => ({ kind: k.code, doctype: d.doctype, guid: d.guid, ps: d.ps, st: d.st })))
@@ -1564,6 +1604,7 @@ const DB = (() => {
   // «Все виды»: документы видов страницы (этап 1 — экземпляр вида, этап 2 — экземпляры второго этапа), ещё не выполнявшиеся,
   // плюс документы с ошибками, у которых исправление уже выложено на сервер, а последний прогон шёл меньше 5 минут
   function docsOfKinds(kinds, stage) {
+    if (stage === 3) return kinds.flatMap(k => (k.docs3 || []).map(d => ({ kind: k.code, doctype: d.doctype, guid: d.guid, ps: d.ps, st: d.st })));
     return stage === 2
       ? kinds.flatMap(k => (k.docs2 || []).map(d => ({ kind: k.code, doctype: d.doctype, guid: d.guid, ps: d.ps, st: d.st })))
       : kinds.filter(k => k.guid).map(k => ({ kind: k.code, doctype: k.doctype, guid: k.guid, ps: k.ps || '', st: k.s1 }));
@@ -1592,7 +1633,7 @@ const DB = (() => {
   async function downloadBatch(login, stage, docs, suffix, ordered) {
     if (!docs.length) { toast('Нечего запускать'); return; }
     const b = ordered ? buildBatchOrdered(docs) : buildBatch(docs);
-    downloadText(`перепроверка_${login === 'all' ? 'все' : login === 'none' ? 'без_исполнителя' : userName(login)}${stage === 2 ? '_этап2' : ''}${suffix ? '_' + suffix : ''}_${stamp()}.txt`, b.text);
+    downloadText(`перепроверка_${login === 'all' ? 'все' : login === 'none' ? 'без_исполнителя' : userName(login)}${stageSfx(stage)}${suffix ? '_' + suffix : ''}_${stamp()}.txt`, b.text);
     toast(`Скачан JSON: ${b.count} ${plural(b.count, 'документ', 'документа', 'документов')}`);
     // порядок пакета запоминается: по номеру N/M в протоколе потом определяется набор параметров
     try { await DB.saveBatch(S.me.login, stage, b.items); } catch (e) { console.warn('batch', e); }
@@ -1633,7 +1674,7 @@ const DB = (() => {
       const s = up && up.logTo ? (ts(up.logTo) - ts(st.last.startAt)) / 1000 : null;
       return { sec: s != null && s > 0 ? s : null, src: 'до обрыва', atLeast: true };
     }
-    if (stage === 2 && k && k.s1 && k.s1.sec != null) return { sec: k.s1.sec, src: 'по первому этапу' };
+    if (multi(stage) && k && k.s1 && k.s1.sec != null) return { sec: k.s1.sec, src: 'по первому этапу' };
     const t = []; let approx = false;
     for (const n of (k && k.algorithms) || []) {
       const f = String(n).split('.')[0];
@@ -1770,7 +1811,7 @@ const DB = (() => {
     const who = sm.all ? (S.f.all.who === 'all' ? 'все' : S.f.all.who === 'none' ? 'без_исполнителя' : userName(S.f.all.who)) : userName(sm.login);
     for (let i = 0; i < parts.length; i++) {
       const b = buildBatchOrdered(parts[i]);
-      downloadText(`перепроверка_${who}${sm.stage === 2 ? '_этап2' : ''}_умная${parts.length > 1 ? `_${i + 1}из${parts.length}` : ''}_${stamp()}.txt`, b.text);
+      downloadText(`перепроверка_${who}${stageSfx(sm.stage)}_умная${parts.length > 1 ? `_${i + 1}из${parts.length}` : ''}_${stamp()}.txt`, b.text);
       try { await DB.saveBatch(S.me.login, sm.stage, b.items); } catch (e) { console.warn('batch', e); }
       if (i < parts.length - 1) await new Promise(r => setTimeout(r, 400));
     }
@@ -1782,12 +1823,14 @@ const DB = (() => {
   function exportCsv(login) {
     const q = s => '"' + String(s ?? '').replace(/"/g, '""') + '"';
     const rows = [['Код вида', 'Наименование', 'Тип', 'Исполнитель', 'GUID экземпляра', 'Алгоритмов', 'Статус', 'Последний прогон', 'Время документа, с', 'Ошибок',
-      'Ошибок в «не трогать»', 'Проверка', 'Комментарий', 'Проверил', 'Этап 2: документов', 'Этап 2: выполнено', 'Этап 2: с ошибками', 'Этап 2: проверка'].map(q).join(';')];
+      'Ошибок в «не трогать»', 'Проверка', 'Комментарий', 'Проверил', 'Этап 2: документов', 'Этап 2: выполнено', 'Этап 2: с ошибками', 'Этап 2: проверка',
+      'Спец. этап: документов', 'Спец. этап: выполнено', 'Спец. этап: с ошибками', 'Спец. этап: проверка'].map(q).join(';')];
     S.kinds.filter(k => !login || k.assignee === login).forEach(k => rows.push([
       q(k.code), q(k.name), q(typeRu(k.doctype, k.category)), q(k.assignee ? userName(k.assignee) : ''), q(k.guid), k.algCount, q(STATUS[k.status].label),
       q(k.lastRunAt ? fmtDT(k.lastRunAt, true) : ''), k.docSec != null ? String(Math.round(k.docSec * 10) / 10).replace('.', ',') : '', k.errors, k.ignored,
       q(k.reviewStatus === 'ok' ? 'Проверено' : k.reviewStatus === 'issue' ? 'Замечание' : ''), q(k.reviewComment), q(k.reviewBy ? userName(k.reviewBy) : ''),
       k.s2.total, k.s2.done, k.s2.errors, q(k.review2Status === 'ok' ? 'Проверено' : k.review2Status === 'issue' ? 'Замечание: ' + (k.review2Comment || '') : ''),
+      k.s3.total, k.s3.done, k.s3.errors, q(k.review3Status === 'ok' ? 'Проверено' : k.review3Status === 'issue' ? 'Замечание: ' + (k.review3Comment || '') : ''),
     ].join(';')));
     downloadText(`перепроверка_${login ? userName(login) : 'все'}_${stamp()}.csv`, '﻿' + rows.join('\r\n') + '\r\n', 'text/csv;charset=utf-8');
   }
@@ -1970,7 +2013,7 @@ const DB = (() => {
     return `<div class="card hero">
       ${donut(s)}
       <div>
-        <h2>${title}${stage === 2 ? ' <span class="stage-chip">этап 2</span>' : ''}</h2>
+        <h2>${title}${stageChip(stage)}</h2>
         <div class="lead">${lead}</div>
         <div class="hero-stats">
           ${sp('ok', s.ok, 'выполнено', 'var(--ok)')}
@@ -1997,14 +2040,19 @@ const DB = (() => {
     const l1 = stage1Left(login || S.me.login);
     const open = page === 'all' || (l1.total > 0 && l1.left === 0);
     const has2 = page === 'all' ? S.kinds.some(k => k.docs2.length) : hasStage2(login);
-    if (!has2) return '';
+    const n3 = page === 'all' ? S.kinds.reduce((a, k) => a + k.docs3.length, 0) : docsOf(login || S.me.login, 3).length;
+    if (!has2 && !n3) return '';
     const n2 = page === 'all' ? S.kinds.reduce((a, k) => a + k.docs2.length, 0) : docsOf(login, 2).length;
+    const sp = S.special;
+    const hint = st === 3 && sp ? `Спец. этап «${esc(sp.name)}»: документы с новыми наборами параметров, назначены авторам списков. Засчитываются прогоны с ${fmtDT(sp.startedAt, true)} — всё с нуля.${sp.note ? ' ' + esc(sp.note) : ''}`
+      : open ? `Этап 2: ${STAGE2_INFO}.` : `Этап 2 откроется, когда будет выполнено 100% первого — осталось ${l1.left} ${plural(l1.left, 'документ', 'документа', 'документов')}.`;
     return `<div class="stagebar">
       <div class="seg">
         <button class="${st === 1 ? 'on' : ''}" data-act="stage" data-page="${page}" data-st="1">Этап 1 · по одному документу</button>
-        <button class="${st === 2 ? 'on' : ''}" data-act="stage" data-page="${page}" data-st="2" ${open ? '' : 'disabled'}>Этап 2 · ${n2} ${plural(n2, 'документ', 'документа', 'документов')}${open ? '' : ' 🔒'}</button>
+        ${has2 ? `<button class="${st === 2 ? 'on' : ''}" data-act="stage" data-page="${page}" data-st="2" ${open ? '' : 'disabled'}>Этап 2 · ${n2} ${plural(n2, 'документ', 'документа', 'документов')}${open ? '' : ' 🔒'}</button>` : ''}
+        ${n3 ? `<button class="spec ${st === 3 ? 'on' : ''}" data-act="stage" data-page="${page}" data-st="3">Спец. этап · ${n3} ${plural(n3, 'документ', 'документа', 'документов')}</button>` : ''}
       </div>
-      <span class="hint">${open ? `Этап 2: ${STAGE2_INFO}.` : `Этап 2 откроется, когда будет выполнено 100% первого — осталось ${l1.left} ${plural(l1.left, 'документ', 'документа', 'документов')}.`}</span>
+      <span class="hint">${hint}</span>
     </div>`;
   }
 
@@ -2022,7 +2070,7 @@ const DB = (() => {
           : `Ошибки в ${ed.all.length} ${plural(ed.all.length, 'документе', 'документах', 'документах')} ещё не исправлены — кнопка откроется после исправления и выкладки алгоритмов.`;
     return `<div class="steps">
       <div class="card step ${s.remaining === 0 && s.total ? 'done' : ''}">
-        <div class="t"><span class="n">1</span>Скачайте пакет${stage === 2 ? ' этапа 2' : ''}</div>
+        <div class="t"><span class="n">1</span>Скачайте пакет${stage === 3 ? ' спец. этапа' : stage === 2 ? ' этапа 2' : ''}</div>
         <div class="d">${n ? `JSON только с тем, что ещё не выполнилось — <b style="color:var(--text)">${n} ${plural(n, 'документ', 'документа', 'документов')}</b>. После падения сервера просто скачайте его заново.` : 'Все документы выполнены — запускать нечего.'}</div>
         <div class="acts">
           <button class="btn smart-btn" data-act="smart" data-login="${esc(login)}" data-st="${stage}" title="Не проверявшиеся, исправленные и оптимизированные (выложенные) — от быстрых к медленным, тяжёлые в конце"><span class="spark">✦</span>Умная выгрузка JSON<span class="smart-tag">рекомендуем</span></button>
@@ -2038,7 +2086,7 @@ const DB = (() => {
       </div>
       <div class="card step">
         <div class="t"><span class="n">2</span>Запустите в ПиКТС 2.0</div>
-        <div class="d">«Пакетное выполнение алгоритмов актуализации» → загрузите скачанный файл. Набор параметров уже указан в JSON${stage === 2 ? ' (для аналитических — свой набор у каждого документа)' : ''}:</div>
+        <div class="d">«Пакетное выполнение алгоритмов актуализации» → загрузите скачанный файл. Набор параметров уже указан в JSON${multi(stage) ? ' (для аналитических — свой набор у каждого документа)' : ''}:</div>
         <div class="copybox"><span style="flex:1">"paramValueSetCode": "BatchRun / код набора (у аналитических отчётов — свой, из «Все гуиды»)"</span></div>
         <div class="d" style="flex:0">Когда пакет закончится (или сервер упадёт) — сохраните протокол в .txt.</div>
       </div>
@@ -2066,7 +2114,7 @@ const DB = (() => {
       if (f.type !== 'all') { if (f.type === 'analytic' ? k.category !== 'analytic' : (k.doctype !== f.type || k.category === 'analytic')) return false; }
       if (f.who && f.who !== 'all') { if (f.who === 'none' ? k.assignee : k.assignee !== f.who) return false; }
       if (q && !(k.code.toLowerCase().includes(q) || (k.name || '').toLowerCase().includes(q) || (k.guid || '').includes(q) || (k.grp || '').includes(q)
-        || k.algorithms.some(a => a.toLowerCase().includes(q)) || k.docs2.some(d => d.guid.includes(q)))) return false;
+        || k.algorithms.some(a => a.toLowerCase().includes(q)) || k.docs2.some(d => d.guid.includes(q)) || (k.docs3 || []).some(d => d.guid.includes(q)))) return false;
       return true;
     });
   }
@@ -2149,15 +2197,15 @@ const DB = (() => {
         ${bulk ? `<th class="nosort" style="width:36px"><input type="checkbox" data-act="selAll" ${allSel ? 'checked' : ''} title="Выбрать все показанные"></th>` : ''}
         ${th('status', 'Статус')}${th('code', 'Код вида')}${th('name', 'Наименование')}
         ${showWho ? th('assignee', 'Исполнитель') : ''}
-        ${th('algCount', stage === 2 ? 'Док.' : 'Алг.', 'num')}${th('lastRunAt', 'Прогон')}${th('docSec', 'Время', 'num')}${th('errors', 'Ошибок', 'num')}${th('review', 'Проверка')}
+        ${th('algCount', multi(stage) ? 'Док.' : 'Алг.', 'num')}${th('lastRunAt', 'Прогон')}${th('docSec', 'Время', 'num')}${th('errors', 'Ошибок', 'num')}${th('review', 'Проверка')}
       </tr></thead>
       <tbody>${rows.map(k => `<tr data-kind="${esc(k.code)}" class="${S.selected.has(k.code) ? 'sel' : ''}">
         ${bulk ? `<td data-stop="1"><input type="checkbox" data-act="sel" data-code="${esc(k.code)}" ${S.selected.has(k.code) ? 'checked' : ''}></td>` : ''}
-        <td>${pill(k.status)}${stage === 2 ? mini(k.progress) : ''}${statusNote(k)}</td>
+        <td>${pill(k.status)}${multi(stage) ? mini(k.progress) : ''}${statusNote(k)}</td>
         <td class="code">${esc(k.code)}<div class="type">${typeRu(k.doctype, k.category)}${grpTag(k.grp)}</div></td>
         <td class="name"><div class="nm">${esc(k.name) || '<span class="faint">—</span>'}</div></td>
         ${showWho ? `<td>${who(k.assignee)}</td>` : ''}
-        <td class="num muted">${stage === 2 ? k.progress.total : k.algCount}</td>
+        <td class="num muted">${multi(stage) ? k.progress.total : k.algCount}</td>
         <td class="nowrap muted" title="${k.lastRunAt ? fmtDT(k.lastRunAt, true) : ''}">${k.lastRunAt ? ago(k.lastRunAt) : '—'}</td>
         <td class="num">${k.docSec != null ? fmtSec(k.docSec) : '<span class="faint">—</span>'}</td>
         <td class="num">${k.errors ? `<span class="errn">${k.errors}</span>` : (k.status === 'ok' || k.status === 'server' ? '<span class="faint">0</span>' : '<span class="faint">—</span>')}${k.srv ? ` <span class="srvn" title="серверные проблемы: параметры, проверка данных, подписанты, обрыв">${k.srv}</span>` : ''}</td>
@@ -2179,7 +2227,7 @@ const DB = (() => {
     const stage = pageStage('my');
     const mine = myList();
     const s = stats(mine, stage);
-    const lead = !s.total ? (stage === 2 ? 'Для ваших видов нет документов второго этапа.' : 'На вас пока ничего не назначено.')
+    const lead = !s.total ? (stage === 3 ? 'На вас нет документов спец. этапа.' : stage === 2 ? 'Для ваших видов нет документов второго этапа.' : 'На вас пока ничего не назначено.')
       : s.remaining ? `Осталось выполнить <b style="color:var(--text)">${s.remaining}</b> из ${s.total} ${plural(s.total, 'документа', 'документов', 'документов')}${s.toReview ? `, ждут вашей проверки — <b style="color:var(--text)">${s.toReview}</b> ${plural(s.toReview, 'вид', 'вида', 'видов')}` : ''}.`
         : s.toReview ? `Все документы выполнены. Осталось проверить результаты — <b style="color:var(--text)">${s.toReview}</b> ${plural(s.toReview, 'вид', 'вида', 'видов')}.`
           : stage === 1 && hasStage2(S.me.login) ? 'Этап 1 выполнен полностью — открыт этап 2 🎉' : 'Всё выполнено и проверено. Отличная работа!';
@@ -2249,6 +2297,7 @@ const DB = (() => {
       const s = stats(S.kinds.filter(k => k.assignee === u.login), 1);
       const open2 = stage2Open(u.login) && hasStage2(u.login);
       const s2 = open2 ? stats(viewKinds(2).filter(k => k.assignee === u.login), 2) : null;
+      const s3 = hasStage3(u.login) ? stats(viewKinds(3).filter(k => k.assignee === u.login), 3) : null;
       return `<div class="card person" data-act="person" data-login="${esc(u.login)}" title="Открыть виды: ${esc(u.name)}">
         <div class="top">${avatar(u.login, u.name)}<div><div class="nm">${esc(u.name)}</div><div class="rl">${roleRu(u.role)} · ${s.total} ${plural(s.total, 'вид', 'вида', 'видов')}</div></div>
           <div class="pct"><b>${s.pct}%</b><div class="muted" style="font-size:11.5px">этап 1</div></div></div>
@@ -2260,6 +2309,7 @@ const DB = (() => {
           <div><div class="v">${s.pending}</div><div class="l">осталось</div></div>
         </div>
         ${s2 ? `<div style="margin-top:12px"><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px"><span class="stage-chip">этап 2</span><span class="muted"><b style="color:var(--text)">${s2.done}</b> из ${s2.total} · ${s2.pct}%</span></div>${progressBar(s2, true)}</div>` : ''}
+        ${s3 ? `<div style="margin-top:12px"><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px"><span class="stage-chip spec">спец. этап</span><span class="muted"><b style="color:var(--text)">${s3.done}</b> из ${s3.total} · ${s3.pct}%</span></div>${progressBar(s3, true)}</div>` : ''}
         <div class="foot"><span>Проверено <b>${s.reviewed}</b>${s.issues ? ` · замечаний <b style="color:var(--issue)">${s.issues}</b>` : ''}</span>
           <span>≈ <b>${s.eta != null && s.pending ? fmtSec(s.eta) : s.pending ? '—' : s2 && s2.pending ? fmtSec(s2.eta) : 'готово'}</b></span></div>
       </div>`;
@@ -2597,7 +2647,7 @@ const DB = (() => {
   // статистика алгоритмов по последнему завершённому прогону каждого документа (общая для «Алгоритмов» и «Секций»)
   async function ensureAlgs() {
     if (!S.algs) {
-      const ids = [...new Set(S.kinds.flatMap(k => [k.s1.fin && k.s1.fin.id, ...k.docs2.map(d => d.st.fin && d.st.fin.id)]).filter(Boolean))];
+      const ids = [...new Set(S.kinds.flatMap(k => [k.s1.fin && k.s1.fin.id, ...k.docs2.map(d => d.st.fin && d.st.fin.id), ...k.docs3.map(d => d.st.fin && d.st.fin.id)]).filter(Boolean))];
       const rows = [];
       for (let i = 0; i < ids.length; i += 1000) {
         const part = await safe(() => DB.runsAlgs(ids.slice(i, i + 1000)));
@@ -2865,7 +2915,7 @@ const DB = (() => {
     if (!ov || !S.cur) return;
     const { runs } = S.cur;
     const k = kindByCode(S.cur.k.code) || S.cur.k;
-    const stage = curStage() === 2 && k.docs2.length ? 2 : 1;
+    const stage = curStage() === 3 && k.docs3.length ? 3 : curStage() === 2 && k.docs2.length ? 2 : 1;
     const v = viewOf(k, stage);
     const up = new Map(S.uploadsList.map(u => [u.id, u]));
     const full = new Map(runs.map(r => [r.id, r]));
@@ -2875,6 +2925,8 @@ const DB = (() => {
     if (k.guid || k.s1.last) docs.push({ stage: 1, guid: k.guid, ps: k.ps || '', st: k.s1 });
     k.docs2.forEach(d => docs.push({ stage: 2, guid: d.guid, ps: d.ps, st: d.st }));
     if (k.unk) docs.push({ stage: 2, unknown: true, guid: k.unk.guids.join(', '), ps: '', st: k.unk.st, runs: k.unk.runs });
+    k.docs3.forEach(d => docs.push({ stage: 3, guid: d.guid, ps: d.ps, st: d.st, who: d.assignee, note: d.note }));
+    if (stage === 3) docs.sort((a, b) => (b.stage === 3) - (a.stage === 3));   // на спец. этапе — его документы сверху
     const finOf = d => d.st.fin ? full.get(d.st.fin.id) || d.st.fin : null;
     const lastFin = finOf(docs[0] || { st: k.s1 });
     const last = k.s1.last ? full.get(k.s1.last.id) || k.s1.last : null;
@@ -2894,14 +2946,15 @@ const DB = (() => {
     const pos = S.nav.indexOf(k.code);
     const tab = S.tab;
     const tb = (id, label, n, err, srv) => `<button class="${tab === id ? 'on' : ''}" data-act="tab" data-tab="${id}">${label}${n != null ? `<span class="n ${err && n ? 'err' : ''}">${n}</span>` : ''}${srv ? `<span class="n srv" title="серверные проблемы">${srv}</span>` : ''}</button>`;
-    const docLabel = d => `${d.stage === 2 ? '<span class="stage-chip">этап 2</span>' : '<span class="pill plain small">этап 1</span>'} <span class="mono copy" data-act="copy" data-text="${esc(d.guid || '')}" title="Скопировать GUID">${esc(d.guid || 'без GUID')}</span>${d.ps ? ` <span class="pill plain small">${esc(psLabel(d.ps))}</span>` : ''}${d.unknown ? ` <span class="pill fixp small" title="пакет JSON прогона на сайте не найден (правился или собран вручную), в протоколе сервера набора нет — не засчитано ни одному набору">набор неизвестен${d.runs > 1 ? ` · прогонов ${d.runs}` : ''}</span>` : ''}`;
-    const rv = stage === 2 ? { st: k.review2Status, c: k.review2Comment, by: k.review2By, at: k.review2At } : { st: k.reviewStatus, c: k.reviewComment, by: k.reviewBy, at: k.reviewAt };
+    const docLabel = d => `${d.stage === 3 ? '<span class="stage-chip spec">спец. этап</span>' : d.stage === 2 ? '<span class="stage-chip">этап 2</span>' : '<span class="pill plain small">этап 1</span>'} <span class="mono copy" data-act="copy" data-text="${esc(d.guid || '')}" title="Скопировать GUID">${esc(d.guid || 'без GUID')}</span>${d.ps ? ` <span class="pill plain small">${esc(psLabel(d.ps))}</span>` : ''}${d.unknown ? ` <span class="pill fixp small" title="пакет JSON прогона на сайте не найден (правился или собран вручную), в протоколе сервера набора нет — не засчитано ни одному набору">набор неизвестен${d.runs > 1 ? ` · прогонов ${d.runs}` : ''}</span>` : ''}${d.who ? ` <span class="faint">· ${esc(userName(d.who))}</span>` : ''}${d.note ? ` <span class="faint" title="${esc(d.note)}">ⓘ</span>` : ''}`;
+    const rv = stage === 3 ? { st: k.review3Status, c: k.review3Comment, by: k.review3By, at: k.review3At }
+      : stage === 2 ? { st: k.review2Status, c: k.review2Comment, by: k.review2By, at: k.review2At } : { st: k.reviewStatus, c: k.reviewComment, by: k.reviewBy, at: k.reviewAt };
     let body = '';
     if (tab === 'overview') {
-      const a = k.s2;
+      const a = stage === 3 ? k.s3 : k.s2;
       body = `
         <div class="review-box">
-          ${k.docs2.length ? `<div class="faint" style="font-size:12px;margin-bottom:8px">Отметка проверки — для этапа ${stage}${stage === 2 ? ` (${a.done} из ${a.total} документов выполнено)` : ''}</div>` : ''}
+          ${k.docs2.length || k.docs3.length ? `<div class="faint" style="font-size:12px;margin-bottom:8px">Отметка проверки — для ${stage === 3 ? 'спец. этапа' : 'этапа ' + stage}${multi(stage) ? ` (${a.done} из ${a.total} документов выполнено)` : ''}</div>` : ''}
           <div class="btns">
             <button class="btn ${rv.st === 'ok' ? 'ok-on' : ''}" data-act="review" data-st="ok" data-stage="${stage}">${I.check}Проверено, замечаний нет</button>
             <button class="btn ${rv.st === 'issue' ? 'issue-on' : ''}" data-act="review" data-st="issue" data-stage="${stage}">${I.flag}Есть замечание</button>
@@ -2911,7 +2964,7 @@ const DB = (() => {
           <textarea class="input" id="revComment" placeholder="Комментарий: что не так с результатом, что сверяли…">${esc(rv.c || '')}</textarea>
           ${rv.by ? `<div class="faint" style="font-size:12px;margin-top:6px">Отметил(а): ${esc(userName(rv.by))}, ${fmtDT(rv.at, true)}</div>` : ''}
         </div>
-        ${stage === 2 ? `<div class="section"><h4>Этап 2 · ${a.total} ${plural(a.total, 'документ', 'документа', 'документов')}</h4>
+        ${multi(stage) ? `<div class="section"><h4>${stage === 3 ? 'Спец. этап' : 'Этап 2'} · ${a.total} ${plural(a.total, 'документ', 'документа', 'документов')}</h4>
           <div class="meta-grid">
             <div class="mg"><div class="l">Выполнено</div><div class="v" style="color:var(--ok)">${a.done} из ${a.total}</div></div>
             <div class="mg"><div class="l">С ошибками</div><div class="v" style="color:${a.errors ? 'var(--err)' : 'inherit'}">${a.errors}</div></div>
@@ -2920,7 +2973,7 @@ const DB = (() => {
           </div>
           <div style="margin-top:10px">${progressBar(a)}</div>
           <button class="btn small" style="margin-top:12px" data-act="tab" data-tab="docs">Все документы этапа</button></div>` : ''}
-        <div class="section"><h4>Последний прогон${k.docs2.length ? ' (этап 1)' : ''}</h4>
+        <div class="section"><h4>Последний прогон${k.docs2.length || k.docs3.length ? ' (этап 1)' : ''}</h4>
           ${last ? `<div class="meta-grid">
             <div class="mg"><div class="l">Когда</div><div class="v">${fmtDT(last.startAt, true)}</div></div>
             <div class="mg"><div class="l">Время документа</div><div class="v">${fmtSec(docSec(lastFin || last))}</div></div>
@@ -2985,7 +3038,7 @@ const DB = (() => {
     ov.innerHTML = `<div class="backdrop" data-act="closeDrawer"></div>
     <aside class="drawer" role="dialog" aria-label="Вид ${esc(k.code)}">
       <div class="drawer-head">
-        <div class="row1"><span class="code">${esc(k.code)}</span>${grpTag(k.grp)}${pill(v.status || k.status)}${stage === 2 ? ` <span class="stage-chip">этап 2 · ${k.s2.done}/${k.s2.total}</span>` : ''}
+        <div class="row1"><span class="code">${esc(k.code)}</span>${grpTag(k.grp)}${pill(v.status || k.status)}${stage === 3 ? ` <span class="stage-chip spec">спец. этап · ${k.s3.done}/${k.s3.total}</span>` : stage === 2 ? ` <span class="stage-chip">этап 2 · ${k.s2.done}/${k.s2.total}</span>` : ''}
           ${rv.st === 'ok' ? `<span class="pill rev">${I.check}Проверено</span>` : rv.st === 'issue' ? `<span class="pill issue">${I.flag}Замечание</span>` : ''}
           <div class="drawer-nav">
             ${pos >= 0 ? `<button class="btn ghost icon" data-act="prev" title="Предыдущий (←)" ${pos <= 0 ? 'disabled' : ''}>${I.left}</button>
@@ -2998,7 +3051,7 @@ const DB = (() => {
           <span>${typeRu(k.doctype, k.category)}</span><span>${who(k.assignee)}</span><span>${k.algCount} ${plural(k.algCount, 'алгоритм', 'алгоритма', 'алгоритмов')}${k.linkAlgs && k.linkAlgs.length ? ` + связи` : ''}</span>
           ${k.guid ? `<span class="copy mono" data-act="copy" data-text="${esc(k.guid)}" title="Скопировать GUID">${esc(k.guid)}</span>` : '<span class="faint">нет экземпляра документа</span>'}
         </div>
-        <div class="tabs">${tb('overview', 'Обзор')}${k.docs2.length ? tb('docs', 'Документы', docs.length) : ''}${tb('errors', 'Ошибки', errTotal, true, srvTotal)}${tb('algs', 'Алгоритмы', algs.length)}${tb('sections', 'Секции', S.sections ? (secCountOf(k.code) || null) : null)}${tb('history', 'История', runs.length)}</div>
+        <div class="tabs">${tb('overview', 'Обзор')}${k.docs2.length || k.docs3.length ? tb('docs', 'Документы', docs.length) : ''}${tb('errors', 'Ошибки', errTotal, true, srvTotal)}${tb('algs', 'Алгоритмы', algs.length)}${tb('sections', 'Секции', S.sections ? (secCountOf(k.code) || null) : null)}${tb('history', 'История', runs.length)}</div>
       </div>
       <div class="drawer-body">${body}</div>
     </aside>`;
@@ -3084,6 +3137,7 @@ const DB = (() => {
     S.uploading = true;
     const guidMap = new Map(S.kinds.filter(k => k.guid).map(k => [k.guid.toLowerCase(), k.code]));
     S.instances.forEach(x => { if (!guidMap.has(x.guid.toLowerCase())) guidMap.set(x.guid.toLowerCase(), x.kindCode); });
+    (S.special ? S.special.docs : []).forEach(x => { if (!guidMap.has(x.guid.toLowerCase())) guidMap.set(x.guid.toLowerCase(), x.kindCode); });
     const reports = [];
     try {
       for (let i = 0; i < files.length; i++) {
@@ -3158,7 +3212,7 @@ const DB = (() => {
     modal('Протоколы разобраны', `
       <div class="big-ok">${donut(mine, 74, 9)}<div><b>${fin}</b> ${plural(fin, 'документ отмечен', 'документа отмечено', 'документов отмечено')} выполненными
         ${finU ? `<div class="muted">ещё ${finU} — аналитические с неизвестным набором (JSON пакета не найден на сайте): показаны отдельно, не засчитаны</div>` : ''}
-        <div class="muted">У вас осталось ${mine.remaining} ${plural(mine.remaining, 'документ', 'документа', 'документов')}${st === 2 ? ' этапа 2' : ''}${mine.toReview ? `, ждут проверки — ${mine.toReview} ${plural(mine.toReview, 'вид', 'вида', 'видов')}` : ''}</div></div></div>
+        <div class="muted">У вас осталось ${mine.remaining} ${plural(mine.remaining, 'документ', 'документа', 'документов')}${st === 3 ? ' спец. этапа' : st === 2 ? ' этапа 2' : ''}${mine.toReview ? `, ждут проверки — ${mine.toReview} ${plural(mine.toReview, 'вид', 'вида', 'видов')}` : ''}</div></div></div>
       ${rep.map(r => `<div class="report">
         <div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap"><b>${esc(r.fileName)}</b>
           <span class="muted">${r.batch ? 'пакетный запуск' : 'одиночный запуск'} · ${r.docs} ${plural(r.docs, 'документ', 'документа', 'документов')}</span></div>
@@ -3480,7 +3534,7 @@ const DB = (() => {
         try {
           await DB.setReview(code, stv ? { status: stv, comment, by: S.me.login, at: new Date().toISOString() } : { status: null, comment: null, by: null, at: null }, stage);
         } catch (err) { toast(err.message, true); t.disabled = false; break; }
-        const sfx = stage === 2 ? ' (этап 2)' : '';
+        const sfx = stage === 3 ? ' (спец. этап)' : stage === 2 ? ' (этап 2)' : '';
         await DB.addEvent({ by: S.me.login, kind: code, text: stv === 'ok' ? `проверил(а) ${code}${sfx} — замечаний нет` : stv === 'issue' ? `замечание по ${code}${sfx}: ${comment}` : `снял(а) отметку проверки ${code}${sfx}` });
         const pos = S.nav.indexOf(code);
         const nextCode = stv && pref('autoNext', '1') === '1' ? S.nav[pos + 1] : null;
