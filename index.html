@@ -482,6 +482,16 @@ body.observer [data-act="dlRemaining"], body.observer [data-act="dlRemainingErr"
 .sm-bar { height: 4px; border-radius: 4px; background: var(--surface-3); margin-top: 5px; width: 96px; overflow: hidden; }
 .sm-bar i { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--ok), var(--int)); }
 .sm-info { margin-right: auto; font-size: 13px; line-height: 1.45; }
+.hs-chip { cursor: pointer; user-select: none; }
+.ps-pill { display: inline-block; padding: 2px 9px; border-radius: 8px; font-size: 12.5px; font-weight: 650; font-family: var(--mono, ui-monospace, monospace); background: var(--accent-soft); color: var(--accent-text); white-space: nowrap; }
+.ps-pill.batch { background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); }
+.hs-chip:hover { filter: brightness(.96); }
+.sm-table.hs-algs { max-height: 36vh; }
+.sm-table.hs-docs { max-height: 28vh; }
+.sm-table.hs-docs tbody tr { cursor: default; }
+.hs-algs td.mono, .hs-docs td.mono { white-space: normal; word-break: break-word; }
+.sm-table td.sm-kind { white-space: normal; word-break: break-word; min-width: 160px; }
+.sm-table td .sub-line { white-space: normal; }
 td.small { font-size: 12.5px; }
 
 /* кнопка «Умная выгрузка JSON» — самая заметная */
@@ -1732,6 +1742,7 @@ const DB = (() => {
     const text = JSON.stringify({ documents: groups.map(g => ({ doctype: g.doctype, ids: g.ids, paramValueSetCode: g.ps || 'BatchRun' })) }, null, 4).replace(/\n/g, '\r\n') + '\r\n';
     return { text, items: list.map(d => [d.doctype, d.guid, d.ps || '']), count: list.length };
   }
+  const psPill = ps => `<span class="ps-pill${ps ? '' : ' batch'}" title="набор параметров, с которым документ пойдёт в пакете">${esc(ps || 'BatchRun')}</span>`;
   const fmtEst = x => x.est == null ? '?' : (x.atLeast ? '≥ ' : '') + (x.est < 60 ? '< 1 мин' : `${Math.round(x.est / 60)} мин`);
   const fmtTotal = sec => sec < 3600 ? `${Math.max(1, Math.round(sec / 60))} мин` : `${Math.floor(sec / 3600)} ч ${Math.round((sec % 3600) / 60)} мин`;
   const smartKey = x => unitKey(x.guid, x.ps);
@@ -1767,12 +1778,13 @@ const DB = (() => {
     let n = 0, heavyHead = false;
     const rows = visible.map(x => {
       const on = !sm.off.has(smartKey(x));
-      const head = x.heavy && !heavyHead ? (heavyHead = true, `<tr class="sm-sep"><td colspan="6">Тяжёлые — в конце пакета: прерывались, идут от 30 мин или уровня ПАО</td></tr>`) : '';
+      const head = x.heavy && !heavyHead ? (heavyHead = true, `<tr class="sm-sep"><td colspan="7">Тяжёлые — в конце пакета: прерывались, идут от 30 мин или уровня ПАО</td></tr>`) : '';
       return head + `<tr class="${on ? '' : 'sm-off'}${x.heavy ? ' sm-heavy' : ''}" data-act="smartPick" data-key="${esc(smartKey(x))}">
         <td class="sm-cb"><input type="checkbox" ${on ? 'checked' : ''} data-act="smartPick" data-key="${esc(smartKey(x))}"></td>
         <td class="muted num">${on ? ++n : '—'}</td>
-        <td><b>${esc(x.kind)}</b>${grpTag(grpOf(x.kind))}<div class="sub-line">${esc(x.name || '')}</div></td>
+        <td class="sm-kind"><b>${esc(x.kind)}</b>${grpTag(grpOf(x.kind))}<div class="sub-line">${esc(x.name || '')}</div></td>
         <td><span class="sm-pill ${SMART_PILL[x.cat]}">${SMART_CAT[x.cat]}</span></td>
+        <td class="nowrap">${psPill(x.ps)}<div class="sub-line mono">${esc(shortGuid(x.guid))}</div></td>
         <td class="nowrap"><div class="sm-est">${fmtEst(x)}</div>${bar(x)}</td>
         <td class="muted small">${esc(x.src)}</td></tr>`;
     }).join('');
@@ -1786,8 +1798,8 @@ const DB = (() => {
       </div>
       <div class="sm-table card"><table class="t"><thead><tr>
         <th class="nosort sm-cb"><input type="checkbox" data-act="smartAll" ${allOn ? 'checked' : ''} title="Выбрать все / снять все"></th>
-        <th class="nosort">№</th><th class="nosort">Вид</th><th class="nosort">Что</th><th class="nosort">Оценка</th><th class="nosort">Откуда оценка</th></tr></thead>
-        <tbody>${rows || '<tr><td colspan="6" class="muted" style="text-align:center;padding:24px">Под выбранные условия ничего не попало</td></tr>'}</tbody></table></div>`;
+        <th class="nosort">№</th><th class="nosort">Вид</th><th class="nosort">Что</th><th class="nosort">Набор параметров</th><th class="nosort">Оценка</th><th class="nosort">Откуда оценка</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="7" class="muted" style="text-align:center;padding:24px">Под выбранные условия ничего не попало</td></tr>'}</tbody></table></div>`;
     const info = $('#smartInfo');
     if (info) info.innerHTML = `Выбрано <b>${list.length}</b> из ${visible.length}${sum > 0 ? ` · ~${fmtTotal(sum)}` : ''}${nUnk ? ` · без оценки: ${nUnk}` : ''}${parts.length > 1 ? ` · ${parts.length} ${plural(parts.length, 'файл', 'файла', 'файлов')}` : ''}<br><span class="muted">Файлы запускайте по одному: параллельные пакеты сервер расчёта не тянет.</span>`;
     const btn = $('#smartDl');
@@ -1813,6 +1825,183 @@ const DB = (() => {
       const b = buildBatchOrdered(parts[i]);
       downloadText(`перепроверка_${who}${stageSfx(sm.stage)}_умная${parts.length > 1 ? `_${i + 1}из${parts.length}` : ''}_${stamp()}.txt`, b.text);
       try { await DB.saveBatch(S.me.login, sm.stage, b.items); } catch (e) { console.warn('batch', e); }
+      if (i < parts.length - 1) await new Promise(r => setTimeout(r, 400));
+    }
+    const n = parts.reduce((a, p) => a + p.length, 0);
+    toast(`Скачано: ${n} ${plural(n, 'документ', 'документа', 'документов')}${parts.length > 1 ? ` в ${parts.length} файлах` : ''}`);
+    closeModal();
+  }
+
+  // ---- умная выгрузка по алгоритмам («Работоспособность»): выбранные алгоритмы -> документы, где они выполняются -> JSON
+  const HS_CAT = { bad: 'не работает', srv: 'серверные', broken: 'не завершался', never: 'не запускался', upd: 'новая версия', ok: 'работает' };
+  const HS_PILL = { bad: 'err', srv: 'cut', broken: 'cut', never: 'new', upd: 'rev', ok: 'ok' };
+  // категория алгоритма: статус работоспособности; работающий с выложенной после последнего прогона версией — «новая версия»
+  function hsCat(x) {
+    if (x.st !== 'ok') return x.st;
+    const v = verInfo(x.name);
+    return v && v.available > 1 && !v.pending && v.last && v.last.at && ts(v.last.at) > (x.lastRun || 0) ? 'upd' : 'ok';
+  }
+  // документы видов сайта (экземпляр вида, этап 2, спец. этап) и алгоритмы, которые в них выполнялись (по протоколам);
+  // документ без прогонов — алгоритмы вида; генерация связей вида выполняется после загрузки любого его документа
+  function hsPool() {
+    const pool = new Map();
+    const kindBy = new Map(S.kinds.map(k => [k.code, k]));
+    const add = (k, d, stage) => {
+      if (!d.guid) return;
+      const key = unitKey(d.guid, d.ps);
+      if (!pool.has(key)) pool.set(key, { kind: k.code, doctype: d.doctype, guid: d.guid, ps: d.ps || '', st: d.st, stage, algs: new Set(), seen: false });
+    };
+    for (const k of S.kinds) {
+      if (k.guid) add(k, { doctype: k.doctype, guid: k.guid, ps: k.ps || '', st: k.s1 }, 1);
+      (k.docs2 || []).forEach(d => add(k, d, 2));
+      (k.docs3 || []).forEach(d => add(k, d, 3));
+    }
+    // документы, которые есть только в протоколах (не в списках видов сайта): состояние — по их прогонам
+    const extra = new Map();
+    for (const r of S.runs) {
+      if (!r.guid || !r.doctype || pool.has(unitKey(r.guid, r.ps))) continue;
+      const key = unitKey(r.guid, r.ps);
+      if (!extra.has(key)) extra.set(key, []);
+      extra.get(key).push(r);
+    }
+    for (const [key, l] of extra) {
+      l.sort((a, b) => a.id - b.id);
+      const kr = l.filter(r => r.kindCode).pop();
+      pool.set(key, { kind: kr ? kr.kindCode : '', doctype: l[0].doctype, guid: l[0].guid, ps: l[0].ps || '', st: docState(l), stage: 0, algs: new Set(), seen: false });
+    }
+    for (const r of S.runs) {
+      const x = r.guid && pool.get(unitKey(r.guid, r.ps));
+      if (!x || !(r.algNames || []).length) continue;
+      x.seen = true;
+      r.algNames.forEach(n => x.algs.add(n.toLowerCase()));
+    }
+    for (const x of pool.values()) {
+      const k = kindBy.get(x.kind);
+      if (!k) continue;
+      if (!x.seen) (k.algorithms || []).forEach(a => x.algs.add(a.toLowerCase()));
+      (k.linkAlgs || []).forEach(a => x.algs.add(a.toLowerCase()));
+    }
+    return [...pool.values()];
+  }
+  function hsSelection() {
+    const h = S.hsm;
+    const cand = h.pool.filter(x => { for (const a of x.algs) if (h.on.has(a)) return true; return false; });
+    let docs;
+    if (h.mode === 'all') docs = cand;
+    else {
+      // минимальный набор: жадно — документ, покрывающий больше всего ещё не покрытых алгоритмов, при равенстве — быстрее
+      const left = new Set();
+      cand.forEach(x => x.algs.forEach(a => { if (h.on.has(a)) left.add(a); }));
+      docs = [];
+      const rest = cand.slice();
+      while (left.size) {
+        let best = null, bg = 0;
+        for (const x of rest) {
+          let g = 0;
+          for (const a of x.algs) if (left.has(a)) g++;
+          if (g > bg || (g === bg && g > 0 && (x.est ?? Infinity) < (best.est ?? Infinity))) { best = x; bg = g; }
+        }
+        if (!best) break;
+        docs.push(best);
+        rest.splice(rest.indexOf(best), 1);
+        best.algs.forEach(a => left.delete(a));
+      }
+    }
+    const key = x => x.est == null ? Infinity : x.est;
+    docs = docs.filter(x => h.heavy || !x.heavy).sort((a, b) => (a.heavy - b.heavy) || key(a) - key(b) || (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0));
+    const covered = new Set();
+    docs.forEach(x => x.algs.forEach(a => { if (h.on.has(a)) covered.add(a); }));
+    const parts = [];
+    const per = +h.split || 0;
+    let cur = [], acc = 0;
+    for (const x of docs) {
+      const s = x.est != null ? x.est : 600;
+      if (per && cur.length && (acc + s > per * 60 || (x.heavy && !cur[cur.length - 1].heavy))) { parts.push(cur); cur = []; acc = 0; }
+      cur.push(x); acc += s;
+    }
+    if (cur.length) parts.push(cur);
+    return { docs, covered, parts };
+  }
+  function renderHS() {
+    const h = S.hsm;
+    const cnt = c => h.algs.filter(x => x.cat === c).length;
+    const cntOn = c => h.algs.filter(x => x.cat === c && h.on.has(x.key)).length;
+    const opt = (v, cur, label) => `<option value="${v}" ${String(cur) === String(v) ? 'selected' : ''}>${label}</option>`;
+    $('#hsTop').innerHTML = `<div class="sm-chips">${Object.keys(HS_CAT).filter(c => cnt(c)).map(c => `<span class="sm-chip ${HS_PILL[c]} hs-chip" data-act="hsCat" data-c="${c}" title="Выбрать / снять все «${HS_CAT[c]}»"><b>${cntOn(c)}</b>/${cnt(c)} ${HS_CAT[c]}</span>`).join('')}</div>
+      <div class="sm-opts">
+        <label class="sm-opt">документы <select class="input sm-sel" data-act="hsOpt" data-k="mode">${opt('min', h.mode, 'минимум, чтобы покрыть алгоритмы')}${opt('all', h.mode, 'все, где выполняются')}</select></label>
+        <label class="sm-opt"><input type="checkbox" data-act="hsOpt" data-k="heavy" ${h.heavy ? 'checked' : ''}> брать тяжёлые (в конце)</label>
+        <label class="sm-opt">файлы <select class="input sm-sel" data-act="hsOpt" data-k="split">${opt(0, h.split, 'одним файлом')}${opt(30, h.split, 'по ~30 мин')}${opt(60, h.split, 'по ~60 мин')}${opt(120, h.split, 'по ~2 ч')}</select></label>
+        <label class="sm-opt">показать <select class="input sm-sel" data-act="hsOpt" data-k="view">${opt('on', h.view, 'выбранные')}${opt('all', h.view, 'все алгоритмы')}${opt('off', h.view, 'невыбранные')}</select></label>
+      </div>`;
+    renderHSTables();
+  }
+  function renderHSTables() {
+    const h = S.hsm;
+    const q = h.q.trim().toLowerCase();
+    const vis = h.algs.filter(x => (h.view === 'all' || (h.view === 'on') === h.on.has(x.key))
+      && (!q || x.key.includes(q) || algGroups(x.name).some(g => g.toLowerCase().includes(q))));
+    const { docs, covered, parts } = hsSelection();
+    const allOn = vis.length && vis.every(x => h.on.has(x.key));
+    $('#hsAlgs').innerHTML = `<div class="sm-table card hs-algs"><table class="t"><thead><tr>
+        <th class="nosort sm-cb"><input type="checkbox" data-act="hsAllVis" ${allOn ? 'checked' : ''} title="Выбрать / снять все показанные"></th>
+        <th class="nosort">Алгоритм</th><th class="nosort">Состояние</th><th class="nosort num">Документов</th><th class="nosort">В пакете</th></tr></thead>
+        <tbody>${vis.slice(0, h.lim).map(x => { const on = h.on.has(x.key); return `<tr class="${on ? '' : 'sm-off'}" data-act="hsAlg" data-key="${esc(x.key)}">
+          <td class="sm-cb"><input type="checkbox" ${on ? 'checked' : ''} data-act="hsAlg" data-key="${esc(x.key)}"></td>
+          <td class="mono">${esc(x.name)}</td><td><span class="sm-pill ${HS_PILL[x.cat]}">${HS_CAT[x.cat]}</span></td>
+          <td class="num">${h.nDocs.get(x.key) || '<span class="errn" title="нет документа с этим алгоритмом">0</span>'}</td>
+          <td>${!on ? '' : covered.has(x.key) ? '<span class="faint">✓</span>' : '<span class="errn" title="ни один документ пакета его не выполняет">нет</span>'}</td></tr>`; }).join('')
+        || '<tr><td colspan="5" class="muted" style="text-align:center;padding:20px">Ничего не найдено</td></tr>'}</tbody></table>
+        ${vis.length > h.lim ? `<div style="text-align:center;margin:8px 0"><button class="btn small" data-act="hsMore">Показать ещё (${vis.length - h.lim})</button></div>` : ''}</div>`;
+    let n = 0, heavyHead = false;
+    $('#hsDocs').innerHTML = `<h4 style="margin:14px 0 8px">Документы пакета · ${docs.length}</h4><div class="sm-table card hs-docs"><table class="t"><thead><tr>
+        <th class="nosort">№</th><th class="nosort">Вид</th><th class="nosort">Набор параметров</th><th class="nosort">Алгоритмы</th><th class="nosort">Оценка</th></tr></thead>
+        <tbody>${docs.map(x => {
+          const mine = [...x.algs].filter(a => h.on.has(a));
+          const names = mine.slice(0, 3).map(a => esc(h.names.get(a) || a)).join(', ') + (mine.length > 3 ? ` <span class="faint">+${mine.length - 3}</span>` : '');
+          const head = x.heavy && !heavyHead ? (heavyHead = true, '<tr class="sm-sep"><td colspan="5">Тяжёлые — в конце пакета: прерывались, идут от 30 мин или уровня ПАО</td></tr>') : '';
+          return head + `<tr class="${x.heavy ? 'sm-heavy' : ''}"><td class="muted num">${++n}</td>
+            <td class="sm-kind"><b>${esc(x.kind || '—')}</b>${x.stage === 0 ? ' <span class="stage-chip" title="документа нет в списках видов сайта — взят из протоколов">из протоколов</span>' : ''}${x.stage > 1 ? ` <span class="stage-chip${x.stage === 3 ? ' spec' : ''}">${x.stage === 3 ? 'спец.' : 'этап 2'}</span>` : ''}</td>
+            <td class="nowrap">${psPill(x.ps)}<div class="sub-line mono">${esc(shortGuid(x.guid))}</div></td>
+            <td class="mono small">${names}</td><td class="nowrap"><div class="sm-est">${fmtEst(x)}</div></td></tr>`;
+        }).join('') || '<tr><td colspan="5" class="muted" style="text-align:center;padding:20px">Выберите алгоритмы</td></tr>'}</tbody></table></div>`;
+    const sum = docs.reduce((a, x) => a + (x.est != null ? x.est : 0), 0);
+    const nOn = h.on.size, nUnc = nOn - covered.size;
+    $('#hsInfo').innerHTML = `Алгоритмов <b>${nOn}</b> · документов <b>${docs.length}</b>${sum > 0 ? ` · ~${fmtTotal(sum)}` : ''}${parts.length > 1 ? ` · ${parts.length} ${plural(parts.length, 'файл', 'файла', 'файлов')}` : ''}${nUnc ? ` · <span class="errn">без документа: ${nUnc}</span>` : ''}<br><span class="muted">Файлы запускайте по одному: параллельные пакеты сервер расчёта не тянет.</span>`;
+    const btn = $('#hsDl');
+    if (btn) { btn.disabled = !docs.length; btn.innerHTML = `${I.dl}${parts.length > 1 ? `Скачать ${parts.length} ${plural(parts.length, 'файл', 'файла', 'файлов')}` : 'Скачать JSON'}`; }
+  }
+  async function openHealthSmart() {
+    toast('Считаю оценки времени…');
+    const stats = await loadAlgStats();
+    const kindBy = new Map(S.kinds.map(k => [k.code, k]));
+    const pool = hsPool();
+    for (const x of pool) {
+      const e = estimateDoc(x, kindBy.get(x.kind), stats, x.stage);
+      x.est = e.sec; x.atLeast = !!e.atLeast;
+      x.heavy = x.st.status === 'interrupted' || (e.sec != null && e.sec >= SMART_HEAVY_SEC) || (/ПАО/.test(x.kind) && (e.sec == null || e.sec >= 600));
+    }
+    const ord = { bad: 0, srv: 1, broken: 2, never: 3, upd: 4, ok: 5 };
+    const algs = healthStats().filter(x => x.onSite).map(x => ({ name: x.name, key: x.name.toLowerCase(), cat: hsCat(x) }))
+      .sort((a, b) => ord[a.cat] - ord[b.cat] || a.name.localeCompare(b.name));
+    const nDocs = new Map();
+    pool.forEach(x => x.algs.forEach(a => nDocs.set(a, (nDocs.get(a) || 0) + 1)));
+    S.hsm = { algs, pool, nDocs, names: new Map(algs.map(x => [x.key, x.name])), on: new Set(algs.filter(x => x.cat !== 'ok' && x.cat !== 'upd').map(x => x.key)),   // «новая версия» — кликом по плашке
+      mode: 'min', heavy: true, split: 0, view: 'on', q: '', lim: 300 };
+    modal('Умная выгрузка JSON по алгоритмам', `<div id="hsTop"></div>
+      <div class="toolbar" style="margin:0 0 8px"><div class="search">${I.search}<input class="input" data-act="hsq" placeholder="Найти алгоритм, чтобы добавить или убрать"></div></div>
+      <div id="hsAlgs"></div><div id="hsDocs"></div>`,
+      `<div id="hsInfo" class="sm-info"></div><button class="btn" data-act="closeModal">Закрыть</button><button class="btn primary" id="hsDl" data-act="hsDl">Скачать JSON</button>`);
+    $('.modal').classList.add('wide');
+    renderHS();
+  }
+  async function downloadHealthSmart() {
+    const { parts } = hsSelection();
+    if (!parts.length) { toast('Ничего не выбрано'); return; }
+    for (let i = 0; i < parts.length; i++) {
+      const b = buildBatchOrdered(parts[i]);
+      downloadText(`перепроверка_алгоритмы${parts.length > 1 ? `_${i + 1}из${parts.length}` : ''}_${stamp()}.txt`, b.text);
+      try { await DB.saveBatch(S.me.login, 1, b.items); } catch (e) { console.warn('batch', e); }
       if (i < parts.length - 1) await new Promise(r => setTimeout(r, 400));
     }
     const n = parts.reduce((a, p) => a + p.length, 0);
@@ -2801,7 +2990,8 @@ const DB = (() => {
       <div id="hlTop"></div>
       <div class="toolbar"><div class="search">${I.search}<input class="input" id="q-health" data-act="hq" placeholder="Алгоритм или код группы" value="${esc(f.q)}"><kbd class="hide-sm">/</kbd></div>
         <label class="check" style="font-size:13px" title="Используемые: встречались в протоколах или относятся к виду в проверке, который ещё не прогонялся до конца. Без флажка видны и неиспользуемые: алгоритмы видов вне проверки (старые, тестовые, без экземпляра) и привязанные к виду, но не вызываемые шаблоном"><input type="checkbox" data-act="hsite" ${f.site ? 'checked' : ''}> только используемые</label>
-        <span class="muted" id="hlSum"></span></div>
+        <span class="muted" id="hlSum"></span>
+        <button class="btn primary small" style="margin-left:auto" data-act="hsmart" title="Выбрать алгоритмы и скачать JSON с документами, где они выполняются">${I.dl}Умная выгрузка JSON</button></div>
       <div id="hlTbl"></div>`;
   }
 
@@ -3507,6 +3697,27 @@ const DB = (() => {
       }
       case 'smart': await safe(() => openSmart(t.dataset.login, +t.dataset.st || 1, t.dataset.all === '1')); break;
       case 'smartDl': await downloadSmart(); break;
+      case 'hsmart': await safe(openHealthSmart); break;
+      case 'hsDl': await downloadHealthSmart(); break;
+      case 'hsAlg': { if (!S.hsm) break; const k = t.dataset.key; if (S.hsm.on.has(k)) S.hsm.on.delete(k); else S.hsm.on.add(k); renderHS(); break; }
+      case 'hsCat': {
+        if (!S.hsm) break;
+        const l = S.hsm.algs.filter(x => x.cat === t.dataset.c);
+        const all = l.every(x => S.hsm.on.has(x.key));
+        l.forEach(x => all ? S.hsm.on.delete(x.key) : S.hsm.on.add(x.key));
+        renderHS();
+        break;
+      }
+      case 'hsAllVis': {
+        if (!S.hsm) break;
+        const h = S.hsm, q = h.q.trim().toLowerCase();
+        const vis = h.algs.filter(x => (h.view === 'all' || (h.view === 'on') === h.on.has(x.key)) && (!q || x.key.includes(q) || algGroups(x.name).some(g => g.toLowerCase().includes(q))));
+        const all = vis.every(x => h.on.has(x.key));
+        vis.forEach(x => all ? h.on.delete(x.key) : h.on.add(x.key));
+        renderHS();
+        break;
+      }
+      case 'hsMore': if (S.hsm) { S.hsm.lim += 300; renderHSTables(); } break;
       case 'smartPick': {
         if (!S.smart) break;
         const k = t.dataset.key;
@@ -3607,6 +3818,7 @@ const DB = (() => {
     if (t.dataset.act === 'q') { S.f[t.dataset.page].q = t.value; refreshTable(t.dataset.page); }
     else if (t.dataset.act === 'aq') { S.f.algs.q = t.value; renderAlgs(); }
     else if (t.dataset.act === 'hq') { S.f.hl.q = t.value; S.f.hl.lim = 400; renderHealth(); }
+    else if (t.dataset.act === 'hsq' && S.hsm) { S.hsm.q = t.value; S.hsm.lim = 300; renderHSTables(); }
     else if (t.dataset.act === 'sq') { S.f.sec.q = t.value; S.f.sec.lim = 300; renderSections(); }
   });
 
@@ -3618,6 +3830,7 @@ const DB = (() => {
     else if (t.dataset.act === 'hsite') { S.f.hl.site = t.checked; S.f.hl.lim = 400; renderHealth(); }
     else if (t.dataset.act === 'stype') { S.f.sec.type = t.value; S.f.sec.lim = 300; renderSections(); }
     else if (t.dataset.act === 'scheck') { S.f.sec.check = t.checked; S.f.sec.lim = 300; renderSections(); }
+    else if (t.dataset.act === 'hsOpt' && S.hsm) { S.hsm[t.dataset.k] = t.type === 'checkbox' ? t.checked : t.value; renderHS(); }
     else if (t.dataset.act === 'smartOpt' && S.smart) { S.smart[t.dataset.k] = t.type === 'checkbox' ? t.checked : t.value; renderSmart(); }
   });
 
