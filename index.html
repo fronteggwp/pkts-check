@@ -2743,7 +2743,7 @@ const DB = (() => {
   //  bad    — ни разу без ошибки, были наши ошибки;
   //  srv    — ни разу без ошибки, все ошибки — серверные проблемы (параметры, проверка данных, подписанты, обрыв соединения);
   //  broken — запускался, но каждый раз обрывался вместе с документом (или старые записи без списка ошибок);
-  //  never  — есть в st5 / у видов сайта, но ни в одном протоколе не встречался.
+  //  never  — ни в одном протоколе не встречался (по умолчанию показываются только такие у видов в проверке, ещё не прогнанных до конца).
   const HL = {
     ok: { label: 'Работает', pill: 'ok', col: 'var(--ok)' },
     bad: { label: 'Не работает', pill: 'errors', col: 'var(--err)' },
@@ -2758,7 +2758,13 @@ const DB = (() => {
     const acc = new Map();
     const get = n => { const k = n.toLowerCase(); let x = acc.get(k); if (!x) acc.set(k, x = { name: n, runs: 0, ok: 0, own: 0, srv: 0, broken: 0, lastOk: 0, lastRun: 0, kinds: new Set(), okKinds: new Set(), siteKinds: new Set() }); return x; };
     S.versions.forEach((v, n) => { get(n); });   // исправленные — даже без видов на сайте
-    S.kinds.forEach(k => [...(k.algorithms || []), ...(k.linkAlgs || [])].forEach(a => get(a).siteKinds.add(k.code)));
+    // виды, отработавшие хоть раз до конца: их алгоритмы, которых нет в протоколах, шаблон не вызывает
+    const finKinds = new Set(S.runs.filter(r => r.kindCode && r.finished && !(r.running || []).length).map(r => r.kindCode));
+    const inCheck = k => !!(k.guid || k.assignee || (k.docs2 || []).length || (k.docs3 || []).length);
+    S.kinds.forEach(k => {
+      const pending = inCheck(k) && !finKinds.has(k.code);   // в проверке, но ещё не прогонялся до конца — алгоритмы ждут прогона
+      [...(k.algorithms || []), ...(k.linkAlgs || [])].forEach(a => { const x = get(a); x.siteKinds.add(k.code); if (pending) x.pending = true; });
+    });
     for (const r of S.runs) {
       const names = [...new Set(r.algNames || [])];
       if (!names.length) continue;
@@ -2780,7 +2786,7 @@ const DB = (() => {
       }
     }
     const list = [...acc.values()].map(x => ({
-      ...x, kinds: [...new Set([...x.kinds, ...x.siteKinds])].sort(), okKinds: [...x.okKinds], onSite: x.siteKinds.size > 0 || x.runs > 0,
+      ...x, kinds: [...new Set([...x.kinds, ...x.siteKinds])].sort(), okKinds: [...x.okKinds], onSite: x.runs > 0 || !!x.pending,   // используемый (см. выше)
       st: x.ok ? 'ok' : x.own ? 'bad' : x.srv ? 'srv' : x.broken ? 'broken' : 'never',
     }));
     list.forEach(x => { x.stOrd = HL_ORDER[x.st]; });
@@ -2794,7 +2800,7 @@ const DB = (() => {
       <div class="page-title"><h1>Работоспособность алгоритмов</h1><span class="sub">по всем загруженным протоколам — любой документ, любые параметры: хоть раз отработал без ошибок — «работает»</span></div>
       <div id="hlTop"></div>
       <div class="toolbar"><div class="search">${I.search}<input class="input" id="q-health" data-act="hq" placeholder="Алгоритм или код группы" value="${esc(f.q)}"><kbd class="hide-sm">/</kbd></div>
-        <label class="check" style="font-size:13px" title="Только алгоритмы, которые есть у видов сайта или встречались в протоколах (без алгоритмов видов, которые сейчас не проверяем)"><input type="checkbox" data-act="hsite" ${f.site ? 'checked' : ''}> только алгоритмы видов сайта</label>
+        <label class="check" style="font-size:13px" title="Используемые: встречались в протоколах или относятся к виду в проверке, который ещё не прогонялся до конца. Без флажка видны и неиспользуемые: алгоритмы видов вне проверки (старые, тестовые, без экземпляра) и привязанные к виду, но не вызываемые шаблоном"><input type="checkbox" data-act="hsite" ${f.site ? 'checked' : ''}> только используемые</label>
         <span class="muted" id="hlSum"></span></div>
       <div id="hlTbl"></div>`;
   }
@@ -2809,13 +2815,13 @@ const DB = (() => {
     const pct = n => all.length ? Math.round(n * 1000 / all.length) / 10 : 0;
     const kpi = (l, v, sub, col, mode) => `<div class="kpi ${mode ? 'click' : ''} ${f.mode === mode ? 'on' : ''}" ${mode ? `data-act="hmode" data-key="${mode}"` : ''}><div class="l">${l}</div><div class="v"${col ? ` style="color:${col}"` : ''}>${v}</div>${sub ? `<div class="s">${sub}</div>` : ''}</div>`;
     top.innerHTML = `<div class="kpis">
-        ${kpi('Алгоритмов', all.length, f.site ? 'видов сайта и протоколов' : 'с исправленными без видов на сайте', '', 'all')}
+        ${kpi('Алгоритмов', all.length, f.site ? 'используемые' : 'вместе с неиспользуемыми', '', 'all')}
         ${kpi('Работают', cnt('ok'), `${pct(cnt('ok'))}% · хоть раз без ошибок`, 'var(--ok)', 'ok')}
         ${kpi('Ни разу не отработали', notOk, `${pct(notOk)}% · осталось`, notOk ? 'var(--err)' : '', 'notok')}
         ${kpi('Не работают', cnt('bad'), 'наши ошибки', cnt('bad') ? 'var(--err)' : '', 'bad')}
         ${kpi('Только серверные', cnt('srv'), 'параметры, данные, подписанты, обрыв', cnt('srv') ? 'var(--int)' : '', 'srv')}
         ${kpi('Не завершались', cnt('broken'), 'обрывались вместе с документом', '', 'broken')}
-        ${kpi('Не запускались', cnt('never'), 'нет в протоколах', '', 'never')}
+        ${kpi('Не запускались', cnt('never'), f.site ? 'виды ещё не прогонялись' : 'нет в протоколах', '', 'never')}
       </div>`;
     const q = f.q.trim().toLowerCase();
     const s = S.sort.hl;
