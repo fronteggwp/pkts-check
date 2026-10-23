@@ -483,6 +483,8 @@ body.observer [data-act="dlRemaining"], body.observer [data-act="dlRemainingErr"
 .sm-bar i { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--ok), var(--int)); }
 .sm-info { margin-right: auto; font-size: 13px; line-height: 1.45; }
 .hs-chip { cursor: pointer; user-select: none; }
+#hlTbl td.mono { white-space: normal; word-break: break-word; min-width: 260px; }
+#hlTbl .ps-pill { margin: 1px 0; }
 .ps-pill { display: inline-block; padding: 2px 9px; border-radius: 8px; font-size: 12.5px; font-weight: 650; font-family: var(--mono, ui-monospace, monospace); background: var(--accent-soft); color: var(--accent-text); white-space: nowrap; }
 .ps-pill.batch { background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); }
 .hs-chip:hover { filter: brightness(.96); }
@@ -1742,7 +1744,7 @@ const DB = (() => {
     const text = JSON.stringify({ documents: groups.map(g => ({ doctype: g.doctype, ids: g.ids, paramValueSetCode: g.ps || 'BatchRun' })) }, null, 4).replace(/\n/g, '\r\n') + '\r\n';
     return { text, items: list.map(d => [d.doctype, d.guid, d.ps || '']), count: list.length };
   }
-  const psPill = ps => `<span class="ps-pill${ps ? '' : ' batch'}" title="набор параметров, с которым документ пойдёт в пакете">${esc(ps || 'BatchRun')}</span>`;
+  const psPill = ps => `<span class="ps-pill${ps ? '' : ' batch'}" title="набор параметров">${esc(ps || 'BatchRun')}</span>`;
   const fmtEst = x => x.est == null ? '?' : (x.atLeast ? '≥ ' : '') + (x.est < 60 ? '< 1 мин' : `${Math.round(x.est / 60)} мин`);
   const fmtTotal = sec => sec < 3600 ? `${Math.max(1, Math.round(sec / 60))} мин` : `${Math.floor(sec / 3600)} ч ${Math.round((sec % 3600) / 60)} мин`;
   const smartKey = x => unitKey(x.guid, x.ps);
@@ -2945,7 +2947,16 @@ const DB = (() => {
   function healthStats() {
     if (hlCache && hlCache.runs === S.runs && hlCache.kinds === S.kinds && hlCache.vers === S.versions) return hlCache.list;
     const acc = new Map();
-    const get = n => { const k = n.toLowerCase(); let x = acc.get(k); if (!x) acc.set(k, x = { name: n, runs: 0, ok: 0, own: 0, srv: 0, broken: 0, lastOk: 0, lastRun: 0, kinds: new Set(), okKinds: new Set(), siteKinds: new Set() }); return x; };
+    const get = n => { const k = n.toLowerCase(); let x = acc.get(k); if (!x) acc.set(k, x = { name: n, runs: 0, ok: 0, own: 0, srv: 0, broken: 0, lastOk: 0, lastRun: 0, kinds: new Set(), okKinds: new Set(), siteKinds: new Set(), docs: new Map() }); return x; };
+    // документ алгоритма (GUID + набор параметров): последний прогон и его итог для этого алгоритма
+    const doc = (x, r, t, res) => {
+      const key = unitKey(r.guid, r.ps);
+      let d = x.docs.get(key);
+      if (!d) x.docs.set(key, d = { guid: r.guid || '', ps: r.ps || '', unk: psUnknown(r), kind: r.kindCode || '', runs: 0, at: 0, res: '' });
+      d.runs++;
+      if (r.kindCode) d.kind = r.kindCode;
+      if (t >= d.at) { d.at = t; d.res = res; d.unk = psUnknown(r); }
+    };
     S.versions.forEach((v, n) => { get(n); });   // исправленные — даже без видов на сайте
     // виды, отработавшие хоть раз до конца: их алгоритмы, которых нет в протоколах, шаблон не вызывает
     const finKinds = new Set(S.runs.filter(r => r.kindCode && r.finished && !(r.running || []).length).map(r => r.kindCode));
@@ -2967,15 +2978,15 @@ const DB = (() => {
         x.runs++;
         if (r.kindCode) x.kinds.add(r.kindCode);
         if (t > x.lastRun) x.lastRun = t;
-        if (errs === null) { x.broken++; continue; }
+        if (errs === null) { x.broken++; doc(x, r, t, 'broken'); continue; }
         if (errs.includes(n)) {
-          if (own ? own.includes(n) : !srvSet.has(n)) x.own++; else x.srv++;
-        } else if (!r.finished && running.has(n)) x.broken++;
-        else { x.ok++; if (r.kindCode) x.okKinds.add(r.kindCode); if (t > x.lastOk) x.lastOk = t; }
+          if (own ? own.includes(n) : !srvSet.has(n)) { x.own++; doc(x, r, t, 'bad'); } else { x.srv++; doc(x, r, t, 'srv'); }
+        } else if (!r.finished && running.has(n)) { x.broken++; doc(x, r, t, 'broken'); }
+        else { x.ok++; if (r.kindCode) x.okKinds.add(r.kindCode); if (t > x.lastOk) x.lastOk = t; doc(x, r, t, 'ok'); }
       }
     }
     const list = [...acc.values()].map(x => ({
-      ...x, kinds: [...new Set([...x.kinds, ...x.siteKinds])].sort(), okKinds: [...x.okKinds], onSite: x.runs > 0 || !!x.pending,   // используемый (см. выше)
+      ...x, docs: [...x.docs.values()].sort((a, b) => b.at - a.at), pss: [...new Set([...x.docs.values()].map(d => d.unk ? '?' : d.ps))].sort(), kinds: [...new Set([...x.kinds, ...x.siteKinds])].sort(), okKinds: [...x.okKinds], onSite: x.runs > 0 || !!x.pending,   // используемый (см. выше)
       st: x.ok ? 'ok' : x.own ? 'bad' : x.srv ? 'srv' : x.broken ? 'broken' : 'never',
     }));
     list.forEach(x => { x.stOrd = HL_ORDER[x.st]; });
@@ -3032,12 +3043,15 @@ const DB = (() => {
       const after = v.last && v.last.at && ts(v.last.at) > (x.lastRun || 0);
       return `<span class="pill ${v.pending ? 'fixp' : 'fixd'} small" title="${esc(v.notes || '')}">${verLabel(v.available)}${v.pending ? ' · ждёт выкладки' : after ? ' · не проверена' : ''}</span>`;
     };
+    const psCell = l => !l.length ? '<span class="faint">—</span>'
+      : l.slice(0, 2).map(p => p === '?' ? '<span class="ps-pill batch" title="набор прогона не определён (запуск без JSON с сайта)">?</span>' : psPill(p)).join(' ')
+        + (l.length > 2 ? ` <span class="faint" title="${esc(l.slice(2).map(p => p || 'BatchRun').join(', '))}">+${l.length - 2}</span>` : '');
     tbl.innerHTML = `<div class="card table-wrap"><table class="t"><thead><tr>
-      ${th('name', 'Алгоритм')}${th('st', 'Статус')}${th('runs', 'Прогонов', 'num')}${th('ok', 'Без ошибок', 'num')}${th('own', 'Наши ошибки', 'num')}
+      ${th('name', 'Алгоритм')}${th('st', 'Статус')}<th class="nosort" title="с какими наборами параметров алгоритм выполнялся (BatchRun — набор по умолчанию; «?» — набор прогона не определён)">Наборы параметров</th>${th('runs', 'Прогонов', 'num')}${th('ok', 'Без ошибок', 'num')}${th('own', 'Наши ошибки', 'num')}
       ${th('srv', 'Серверные', 'num')}${th('broken', 'Обрыв', 'num')}${th('lastOk', 'Последний успешный')}${th('kinds', 'Видов', 'num')}<th class="nosort">Версия</th></tr></thead>
       <tbody>${list.slice(0, f.lim).map(x => `<tr data-halg="${esc(x.name)}">
         <td class="mono">${esc(x.name)}${ignored(x.name) ? ' <span class="pill ign small">не трогать</span>' : ''}${algGrpLine(x.name)}</td>
-        <td class="nowrap"><span class="pill ${HL[x.st].pill} small">${HL[x.st].label}</span></td>
+        <td class="nowrap"><span class="pill ${HL[x.st].pill} small">${HL[x.st].label}</span></td><td class="nowrap">${psCell(x.pss)}</td>
         <td class="num">${n(x.runs)}</td><td class="num">${n(x.ok, 'var(--ok)')}</td><td class="num">${n(x.own, 'var(--err)')}</td>
         <td class="num">${n(x.srv, 'var(--int)')}</td><td class="num">${n(x.broken)}</td>
         <td class="nowrap">${x.lastOk ? fmtDT(new Date(x.lastOk).toISOString(), true) : '<span class="faint">—</span>'}</td>
@@ -3055,7 +3069,13 @@ const DB = (() => {
         <div class="mg"><div class="l">Без ошибок</div><div class="v">${x.ok}</div></div>
         <div class="mg"><div class="l">Наши ошибки / серверные / обрыв</div><div class="v">${x.own} / ${x.srv} / ${x.broken}</div></div>
         <div class="mg"><div class="l">Последний успешный</div><div class="v">${x.lastOk ? fmtDT(new Date(x.lastOk).toISOString(), true) : '—'}</div></div></div>
-      <div class="section"><h4>Виды</h4>` + (x.kinds.length ? x.kinds.map(c => { const k = kindByCode(c); return `<div style="display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)"><div><a href="#/health/k/${encodeURIComponent(c)}" class="mono">${esc(c)}</a> <span class="muted">${esc(k ? k.name : '')}</span></div>${ok.has(c) ? '<span class="pill ok small">отработал</span>' : '<span class="pill plain small">без успешного прогона</span>'}</div>`; }).join('') : '<div class="muted">Видов на сайте нет</div>') + '</div>');
+      <div class="section"><h4>Виды</h4>` + (x.kinds.length ? x.kinds.map(c => { const k = kindByCode(c); return `<div style="display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)"><div><a href="#/health/k/${encodeURIComponent(c)}" class="mono">${esc(c)}</a> <span class="muted">${esc(k ? k.name : '')}</span></div>${ok.has(c) ? '<span class="pill ok small">отработал</span>' : '<span class="pill plain small">без успешного прогона</span>'}</div>`; }).join('') : '<div class="muted">Видов на сайте нет</div>') + '</div>'
+      + (x.docs.length ? `<div class="section"><h4>Документы и наборы параметров · ${x.docs.length}</h4><div class="table-wrap"><table class="t"><thead><tr>
+          <th class="nosort">Вид</th><th class="nosort">Документ</th><th class="nosort">Набор параметров</th><th class="nosort num">Прогонов</th><th class="nosort">Последний</th></tr></thead>
+          <tbody>${x.docs.map(d => `<tr><td class="mono">${esc(d.kind || '—')}</td><td class="mono faint">${esc(shortGuid(d.guid))}</td>
+            <td>${d.unk ? '<span class="ps-pill batch" title="набор прогона не определён (запуск без JSON с сайта)">?</span>' : psPill(d.ps)}</td><td class="num">${d.runs}</td>
+            <td class="nowrap"><span class="pill ${HL[d.res].pill} small">${HL[d.res].label}</span> <span class="faint">${d.at ? fmtDT(new Date(d.at).toISOString(), true) : ''}</span></td></tr>`).join('')}</tbody></table></div></div>` : ''));
+    if (x.docs.length) $('.modal').classList.add('wide');
   }
 
   // =====================================================================================================================
