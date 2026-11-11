@@ -1245,13 +1245,13 @@ const DB = (() => {
   const who = login => login ? `<span class="who">${avatar(login)}${esc(userName(login))}</span>` : '<span class="faint">не назначен</span>';
   const pill = s => `<span class="pill ${s}"><i></i>${STATUS[s].label}</span>`;
   const typeRu = (t, cat) => cat === 'analytic' ? 'Аналитический' : t === 'Passport' ? 'Паспорт' : 'Сводный';
-  const roleRu = r => r === 'tester' ? 'тестировщик' : r === 'observer' ? 'наблюдатель' : 'разработчик';
+  const roleRu = r => r === 'tester' ? 'тестировщик' : r === 'observer' ? 'наблюдатель' : r === 'templates' ? 'шаблоны' : 'разработчик';
   const docSec = r => r.loadSec ?? (r.endAt ? (ts(r.endAt) - ts(r.startAt)) / 1000 : null);
   const firstName = n => (n || '').split(' ')[0];
   const isDev = () => !!S.me && (S.me.role === 'dev' || S.me.isAdmin);
   // наблюдатель: только смотрит (в базе — без прав на запись), в команде и назначениях не участвует
-  const isObserver = () => !!S.me && S.me.role === 'observer';
-  const teamOf = users => users.filter(u => u.role !== 'observer');
+  const isObserver = () => !!S.me && (S.me.role === 'observer' || S.me.role === 'templates'); // «шаблоны»: алгоритмы — только просмотр
+  const teamOf = users => users.filter(u => u.role !== 'observer' && u.role !== 'templates');
   const WRITE_ACTS = new Set(['aflag', 'attribute', 'unattribute', 'bulkAssign', 'bulkClear', 'delUpload', 'deploy', 'pickFiles', 'review', 'reassign',
     'startReview', 'autoNext', 'dlErrors', 'dlFull', 'dlPerf', 'dlRemaining', 'dlRemainingErr', 'dlServer', 'dlAllServer']);
   const shortGuid = g => g ? g.slice(0, 8) + '…' : '';
