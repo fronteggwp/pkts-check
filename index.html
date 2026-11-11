@@ -578,6 +578,30 @@ td.small { font-size: 12.5px; }
 .grp-line { font-family: var(--font); }
 .grp-line .grp { margin: 0 0 0 4px; }
 
+/* ---------- шаблоны печатных форм */
+.tpl-prog { height: 6px; width: 110px; background: var(--surface-2); border-radius: 4px; overflow: hidden; margin: 3px 0 2px; }
+.tpl-prog i { display: block; height: 100%; background: var(--ok); }
+.tpl-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px 14px; font-size: 13.5px; }
+.tpl-rem { padding: 9px 10px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 6px; cursor: pointer; font-size: 13.5px; }
+.tpl-rem:hover { background: var(--surface-2); }
+.tpl-form { display: flex; flex-direction: column; gap: 12px; }
+.tpl-form label { display: flex; flex-direction: column; gap: 5px; font-weight: 600; font-size: 13px; }
+.tpl-form textarea { resize: vertical; font: inherit; }
+.tpl-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 640px) { .tpl-2 { grid-template-columns: 1fr; } }
+.tpl-zone { border: 2px dashed var(--border-strong); border-radius: 12px; padding: 10px 12px; min-height: 110px; cursor: pointer; }
+.tpl-zone.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.tpl-zone.drag { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.tpl-thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.tpl-th { position: relative; display: flex; flex-direction: column; align-items: center; width: 120px; font-size: 11px; color: var(--muted); text-decoration: none; }
+.tpl-th img { width: 120px; height: 84px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); background: #fff; }
+.tpl-th .pdf { width: 120px; height: 84px; display: grid; place-items: center; border-radius: 8px; border: 1px solid var(--border); font-weight: 700; color: var(--err); }
+.tpl-th .nm { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 3px; }
+.tpl-th .btn { position: absolute; top: 2px; right: 2px; width: 24px; height: 24px; padding: 3px; background: var(--surface); }
+.tpl-cmts { display: flex; flex-direction: column; gap: 8px; }
+.tpl-cmt { display: flex; gap: 8px; align-items: flex-start; font-size: 13.5px; }
+.tpl-cmt.sys { color: var(--muted); font-size: 12.5px; padding-left: 4px; border-left: 3px solid var(--border); }
+
 </style>
 </head>
 <body>
@@ -2133,7 +2157,8 @@ const DB = (() => {
 
   function route() {
     const parts = location.hash.replace(/^#\/?/, '').split('/');
-    S.route = ['my', 'all', 'team', 'uploads', 'algs', 'health', 'sections'].includes(parts[0]) ? parts[0] : 'my';
+    S.route = ['my', 'all', 'team', 'uploads', 'algs', 'health', 'sections', 'tpl'].includes(parts[0]) ? parts[0] : 'my';
+    if (S.route === 'my' && S.me.role === 'templates') S.route = 'tpl';   // проверка шаблонов — сразу в свой раздел
     if (S.route === 'my' && isObserver()) S.route = 'all';
     const kind = parts[1] === 'k' && parts[2] ? decodeURIComponent(parts[2]) : null;
     const pageChanged = !$('#page') || $('#page').dataset.route !== S.route;
@@ -2162,8 +2187,9 @@ const DB = (() => {
     shell.innerHTML = `
       ${DB.demo ? '<div class="demo-bar">Демо-режим: данные хранятся только в этом браузере. Для работы команды подключите Supabase — см. README.</div>' : ''}
       <header class="topbar"><div class="topbar-in">
-        <a class="brand" href="#/${isObserver() ? 'all' : 'my'}" style="color:inherit;text-decoration:none"><span class="logo">${I.logo}</span><div>Перепроверка ПиКТС 2.0<small>${S.kinds.length} видов · ${S.team.length} человек · время МСК</small></div></a>
+        <a class="brand" href="#/${S.me.role === 'templates' ? 'tpl' : isObserver() ? 'all' : 'my'}" style="color:inherit;text-decoration:none"><span class="logo">${I.logo}</span><div>Перепроверка ПиКТС 2.0<small>${S.kinds.length} видов · ${S.team.length} человек · время МСК</small></div></a>
         <nav class="nav">
+          ${S.me.role === 'templates' ? tab('tpl', 'Шаблоны', tplNavCount()) : ''}
           ${isObserver() ? '' : tab('my', 'Мои виды', ms.remaining)}
           ${tab('all', 'Все виды')}
           ${tab('team', 'Команда')}
@@ -2171,6 +2197,7 @@ const DB = (() => {
           ${tab('algs', 'Алгоритмы', isDev() && S.pendingVers.length ? S.pendingVers.length : 0)}
           ${tab('health', 'Работоспособность')}
           ${tab('sections', 'Секции')}
+          ${S.me.role === 'templates' ? '' : tab('tpl', 'Шаблоны', tplNavCount())}
         </nav>
         <button class="btn ghost icon hide-sm" data-act="refresh" title="Обновить данные">${I.refresh}</button>
         <button class="btn ghost icon" data-act="theme" title="Светлая / тёмная тема">${dark ? I.sun : I.moon}</button>
@@ -2197,6 +2224,7 @@ const DB = (() => {
     else if (S.route === 'algs') { p.innerHTML = pageAlgs(); loadAlgs(); }
     else if (S.route === 'health') { p.innerHTML = pageHealth(); renderHealth(); }
     else if (S.route === 'sections') { p.innerHTML = pageSections(); loadSectionsPage(); }
+    else if (S.route === 'tpl') { p.innerHTML = pageTpl(); loadTplPage(); }
     bindDrops();
   }
 
@@ -3352,13 +3380,15 @@ const DB = (() => {
     document.body.appendChild(d);
   }
   function hideDropOverlay() { dragDepth = 0; $$('.drop-overlay').forEach(x => x.remove()); }
-  window.addEventListener('dragenter', e => { if (!isFileDrag(e) || !S.me) return; dragDepth++; showDropOverlay(); });
+  window.addEventListener('dragenter', e => { if (!isFileDrag(e) || !S.me || $$('.modal-layer').length) return; dragDepth++; showDropOverlay(); });
   window.addEventListener('dragleave', e => { if (!isFileDrag(e)) return; if (--dragDepth <= 0) hideDropOverlay(); });
   window.addEventListener('dragover', e => { if (isFileDrag(e) && S.me) e.preventDefault(); });
   window.addEventListener('drop', e => {
     if (!isFileDrag(e) || !S.me) return;
     e.preventDefault();
     hideDropOverlay();
+    // открыто окно (например, замечание по шаблону со своими зонами файлов) или только просмотр — протоколы не разбираем
+    if (isObserver() || $$('.modal-layer').length) return;
     if (e.dataTransfer.files.length) processFiles([...e.dataTransfer.files], '');
   });
 
@@ -3536,6 +3566,7 @@ const DB = (() => {
 
   async function afterChange(msg) {
     S.algs = null;
+    S.tpl = null;
     await safe(loadState);
     renderShell();
     renderPage();
@@ -3572,6 +3603,603 @@ const DB = (() => {
       a.kinds.map(c => { const k = kindByCode(c); return `<div style="display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)"><div><a href="#/algs/k/${encodeURIComponent(c)}" class="mono">${esc(c)}</a> <span class="muted">${esc(k ? k.name : '')}</span></div>${k ? pill(k.status) : ''}</div>`; }).join('') + '</div>',
       '<button class="btn" data-act="closeModal">Закрыть</button>');
   }
+
+  // =====================================================================================================================
+  // ШАБЛОНЫ печатных форм (supabase/06_templates.sql, tools/load_templates.py). Вставляется в app.js при сборке (tools/build.py).
+  // Шаблон = вид документа, разделы = секции вида. Статусы не хранятся — считаются из отметок «без замечаний» и замечаний.
+  const TPL_TYPES = { data: 'Данные не те или пустые', rows: 'Лишние или пропавшие строки', layout: 'Вёрстка: обрезано, перенос, шрифт, границы',
+    pages: 'Разрыв страниц, ориентация', header: 'Шапка, итоги, подписи', open: 'Не открывается / ошибка печати', other: 'Другое' };
+  const TPL_SEV = { block: 'Блокирует', mid: 'Мешает', low: 'Косметика' };
+  const TPL_TRIAGE = { template: 'Шаблон', algorithm: 'Алгоритм (данные)', platform: 'Платформа', notbug: 'Не ошибка' };
+  const TPL_CHECK = [['open', 'Форма открывается и печатается'], ['head', 'Шапка / титул как в 1.0'], ['secs', 'Все разделы на месте, порядок как в 1.0'],
+    ['data', 'Данные в нужных колонках, не пустые'], ['cut', 'Нет обрезанного текста и наездов'], ['pages', 'Разрывы страниц и ориентация'], ['totals', 'Итоги и подписи']];
+  const TPL_ST = { new: ['Не начат', 'pending'], work: ['В работе', 'srvp'], issues: ['Есть замечания', 'errors'], recheck: ['Перепроверить', 'interrupted'], done: ['Принят', 'ok'] };
+  const TPL_SEC = { todo: ['Не проверен', 'pending'], ok: ['Без замечаний', 'ok'], issue: ['Замечание', 'errors'], recheck: ['Перепроверить', 'interrupted'], skip: ['Пустой — не проверять', 'noinstance'] };
+  const TPL_REM = { open: ['Открыто', 'errors'], fixed: ['Исправлено, ждёт выкладки', 'srvp'], recheck: ['Перепроверить', 'interrupted'], closed: ['Закрыто', 'ok'], rejected: ['Не ошибка', 'plain'] };
+  const tplPill = (map, k) => `<span class="pill ${(map[k] || ['', 'plain'])[1]}"><i></i>${esc((map[k] || [k])[0])}</span>`;
+  const canTpl = () => !!S.me && S.me.role !== 'observer';
+  const tplDev = () => isDev();
+  S.f.tpl = { q: '', who: null, st: 'all', view: 'tpls', rst: 'active', rtri: 'all', lim: 200 };
+  S.tplSel = new Set();
+
+  function tplLoadScript(src) {
+    return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('не загрузилось: ' + src)); document.head.appendChild(s); });
+  }
+  const tplSb = () => DB.sb;
+  const tplChk = r => { if (r.error) throw new Error(r.error.message); return r.data; };
+
+  async function tplLoad() {
+    if (DB.demo) throw new Error('Раздел «Шаблоны» работает только с базой (не в демо-режиме)');
+    const sb = tplSb(), pg = b => DB.page(b);
+    const [rel, tpls, secs, marks, rems, files] = await Promise.all([
+      pg(() => sb.from('tpl_releases').select('*').order('id')),
+      pg(() => sb.from('tpl_templates').select('*').eq('active', true).order('sort')),
+      pg(() => sb.from('tpl_sections').select('id,tpl_code,sec_code,sec_order,sec_name,file,alg,build_status,warnings,pdf_pages,changed_release').eq('active', true).order('id')),
+      pg(() => sb.from('tpl_marks').select('*').order('tpl_code')),
+      pg(() => sb.from('tpl_remarks').select('*').order('id')),
+      pg(() => sb.from('tpl_files').select('id,remark_id').order('id')),
+    ]);
+    const T = { rel, relById: new Map(rel.map(r => [r.id, r])), tpls, byCode: new Map(tpls.map(t => [t.code, t])), secs: new Map(), marks: new Map(),
+      rems, remById: new Map(rems.map(r => [r.id, r])), remByTpl: new Map(), remBySec: new Map(), files: new Map() };
+    secs.forEach(s => { let l = T.secs.get(s.tpl_code); if (!l) T.secs.set(s.tpl_code, l = []); l.push(s); });
+    T.secs.forEach(l => l.sort((a, b) => (a.sec_order ?? 9999) - (b.sec_order ?? 9999) || String(a.sec_code).localeCompare(String(b.sec_code), 'ru', { numeric: true })));
+    marks.forEach(m => T.marks.set(m.tpl_code + '|' + m.sec_code, m));
+    rems.forEach(r => {
+      const a = T.remByTpl.get(r.tpl_code) || []; a.push(r); T.remByTpl.set(r.tpl_code, a);
+      if (r.sec_code) { const k = r.tpl_code + '|' + r.sec_code, b = T.remBySec.get(k) || []; b.push(r); T.remBySec.set(k, b); }
+    });
+    files.forEach(f => T.files.set(f.remark_id, (T.files.get(f.remark_id) || 0) + 1));
+    T.latest = rel[rel.length - 1] || null;
+    T.deployed = rel.filter(r => r.deployed_at).pop() || null;
+    try { T.alg = new Map(healthStats().map(x => [x.name.toLowerCase(), x.st])); } catch { T.alg = new Map(); }
+    S.tpl = T;
+    if (S.f.tpl.who == null) S.f.tpl.who = tplDev() ? 'all' : 'mine';
+    return T;
+  }
+  async function tplReload(keepModal) {
+    await safe(tplLoad);
+    renderShell();
+    if (S.route === 'tpl') renderTpl();
+    if (keepModal) keepModal();
+  }
+
+  function remState(r) {
+    if (r.state === 'fixed') { const rel = S.tpl.relById.get(r.fixed_release); return rel && rel.deployed_at ? 'recheck' : 'fixed'; }
+    return r.state;
+  }
+  const remActive = st => st === 'open' || st === 'fixed' || st === 'recheck';
+  function secState(code, s) {
+    if (/^SKIPPED/.test(s.build_status || '')) return 'skip';
+    const rs = (S.tpl.remBySec.get(code + '|' + s.sec_code) || []).map(remState);
+    if (rs.includes('recheck')) return 'recheck';
+    if (rs.some(x => x === 'open' || x === 'fixed')) return 'issue';
+    const m = S.tpl.marks.get(code + '|' + s.sec_code);
+    return m && m.ok ? 'ok' : 'todo';
+  }
+  const algSt = name => name ? (S.tpl.alg.get(name.toLowerCase()) || 'never') : '';
+  function tplSum(t) {
+    const secs = S.tpl.secs.get(t.code) || [];
+    const st = secs.map(s => secState(t.code, s));
+    const rst = (S.tpl.remByTpl.get(t.code) || []).map(remState);
+    const c = x => st.filter(y => y === x).length;
+    const n = { total: st.filter(x => x !== 'skip').length, ok: c('ok'), issue: c('issue'), skip: c('skip'),
+      open: rst.filter(x => x === 'open' || x === 'fixed').length, rech: rst.filter(x => x === 'recheck').length,
+      algBad: secs.filter(s => s.alg && algSt(s.alg) === 'bad').length, checks: Object.values(t.checklist || {}).filter(Boolean).length };
+    n.status = n.rech ? 'recheck' : n.open ? 'issues' : (n.total && n.ok === n.total) || (!n.total && n.checks) ? 'done' : (n.ok || n.checks || rst.length) ? 'work' : 'new';
+    return n;
+  }
+  function tplNavCount() {
+    if (!S.tpl || !S.me) return 0;
+    const mine = S.tpl.tpls.filter(t => t.assignee === S.me.login);
+    return mine.filter(t => { const s = tplSum(t).status; return s !== 'done'; }).length;
+  }
+  const tplMine = t => S.f.tpl.who === 'all' || (S.f.tpl.who === 'mine' ? t.assignee === S.me.login : S.f.tpl.who === 'none' ? !t.assignee : t.assignee === S.f.tpl.who);
+  const tplTeam = () => S.users.filter(u => u.role !== 'observer');
+  const relName = id => (S.tpl.relById.get(id) || {}).name || '';
+
+  // ---------- страница
+  function pageTpl() {
+    return `
+      <div class="page-title"><h1>Шаблоны печатных форм</h1><span class="sub">проверка печатных форм 2.0 (Stimulsoft) против 1.0: разделы шаблона, замечания со скриншотами, перепроверка после выкладки</span></div>
+      <div id="tplTop"><div class="card card-pad">${'<div class="skel" style="margin:12px 0"></div>'.repeat(3)}</div></div>
+      <div id="tplBar"></div>
+      <div id="tplTbl"></div>`;
+  }
+  async function loadTplPage() {
+    if (!S.tpl) { const ok = await safe(tplLoad); if (!ok) { const el = $('#tplTop'); if (el) el.innerHTML = '<div class="card card-pad">Не удалось загрузить данные шаблонов</div>'; return; } renderShell(); }
+    if (S.route === 'tpl') renderTpl();
+  }
+
+  function renderTpl() {
+    const top = $('#tplTop'), bar = $('#tplBar'), tbl = $('#tplTbl');
+    if (!top || !S.tpl) return;
+    const T = S.tpl, f = S.f.tpl;
+    const scope = T.tpls.filter(tplMine);
+    const sums = new Map(scope.map(t => [t.code, tplSum(t)]));
+    const secTotal = [...sums.values()].reduce((a, n) => a + n.total, 0), secOk = [...sums.values()].reduce((a, n) => a + n.ok, 0);
+    const scopeCodes = new Set(scope.map(t => t.code));
+    const rems = T.rems.filter(r => scopeCodes.has(r.tpl_code));
+    const rc = st => rems.filter(r => remState(r) === st).length;
+    const kpi = (l, v, sub, col) => `<div class="kpi"><div class="l">${l}</div><div class="v"${col ? ` style="color:${col}"` : ''}>${v}</div>${sub ? `<div class="s">${sub}</div>` : ''}</div>`;
+    const L = T.latest, D = T.deployed;
+    const relLine = L ? `Сборка <b>${esc(L.name)}</b>${L.built_at ? ' от ' + esc(fmtDT(L.built_at, true).slice(0, 10)) : ''} · ${L.deployed_at ? `<span style="color:var(--ok)">на сервере с ${fmtDT(L.deployed_at, true)}</span>` : `<span style="color:var(--int)">ещё не выложена на сервер</span>${D ? ` (на сервере ${esc(D.name)})` : ''}`}${L.note ? ` · <span class="muted">${esc(L.note)}</span>` : ''}` : 'Сборок ещё нет';
+    top.innerHTML = `<div class="card deploy-card ${L && L.deployed_at ? 'calm' : ''}"><div class="txt">${relLine}</div>
+        ${tplDev() ? `<div style="display:flex;gap:8px;flex-wrap:wrap">${L && !L.deployed_at ? `<button class="btn primary small" data-act="tplDeploy">${I.server}Залил ${esc(L.name)} на сервер</button>` : ''}
+          <button class="btn small" data-act="tplExport">${I.dl}Выгрузка замечаний</button></div>` : ''}</div>
+      <div class="kpis">
+        ${kpi('Шаблонов', scope.length, f.who === 'mine' ? 'моих' : f.who === 'all' ? 'всего' : 'в выборке')}
+        ${kpi('Принято', [...sums.values()].filter(n => n.status === 'done').length, 'шаблонов', 'var(--ok)')}
+        ${kpi('Разделов проверено', `${secOk}<small style="font-size:14px;color:var(--faint)"> / ${secTotal}</small>`, secTotal ? Math.round(secOk * 100 / secTotal) + '%' : '')}
+        ${kpi('Открытых замечаний', rc('open') + rc('fixed'), rc('fixed') ? `из них исправлено, ждёт выкладки: ${rc('fixed')}` : '', rc('open') ? 'var(--err)' : '')}
+        ${kpi('На перепроверку', rc('recheck'), 'исправлено и выложено', rc('recheck') ? 'var(--int)' : '')}
+      </div>`;
+    const users = tplTeam();
+    const whoSel = `<select class="input" data-act="tplWho" style="width:auto">
+        <option value="mine" ${f.who === 'mine' ? 'selected' : ''}>Мои</option><option value="all" ${f.who === 'all' ? 'selected' : ''}>Все</option>
+        <option value="none" ${f.who === 'none' ? 'selected' : ''}>Не назначены</option>
+        ${users.map(u => `<option value="${esc(u.login)}" ${f.who === u.login ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}</select>`;
+    const viewSeg = `<div class="seg"><button class="${f.view === 'tpls' ? 'on' : ''}" data-act="tplView" data-key="tpls">Шаблоны</button><button class="${f.view === 'rems' ? 'on' : ''}" data-act="tplView" data-key="rems">Замечания<span class="n">${rems.length}</span></button></div>`;
+    bar.innerHTML = `<div class="toolbar"><div class="search">${I.search}<input class="input" id="q-tpl" data-act="tplq" placeholder="Код или название шаблона, раздел, алгоритм" value="${esc(f.q)}"><kbd class="hide-sm">/</kbd></div>
+      ${whoSel}${viewSeg}</div><div class="seg" id="tplModes" style="margin-bottom:12px"></div>`;
+    if (f.view === 'rems') { renderTplRems(rems); return; }
+    const cnt = st => [...sums.values()].filter(n => n.status === st).length;
+    const mb = (key, label, cls, n) => `<button class="${f.st === key ? 'on' : ''}" data-act="tplSt" data-key="${key}">${cls ? `<span class="dot" style="background:var(--${cls})"></span>` : ''}${label}<span class="n">${n}</span></button>`;
+    $('#tplModes').innerHTML = mb('all', 'Все', '', scope.length) + mb('new', 'Не начаты', 'pend', cnt('new')) + mb('work', 'В работе', 'srv', cnt('work'))
+      + mb('issues', 'Есть замечания', 'err', cnt('issues')) + mb('recheck', 'Перепроверить', 'int', cnt('recheck')) + mb('done', 'Приняты', 'ok', cnt('done'));
+    const q = f.q.trim().toLowerCase();
+    const hit = t => !q || [t.code, t.name, t.kind_type].some(v => v && v.toLowerCase().includes(q))
+      || (T.secs.get(t.code) || []).some(s => [s.sec_name, s.sec_code, s.alg].some(v => v && v.toLowerCase().includes(q)));
+    const ord = { recheck: 0, issues: 1, work: 2, new: 3, done: 4 };
+    const list = scope.filter(t => (f.st === 'all' || sums.get(t.code).status === f.st) && hit(t))
+      .sort((a, b) => ord[sums.get(a.code).status] - ord[sums.get(b.code).status] || (sums.get(a.code).algBad - sums.get(b.code).algBad) || a.sort - b.sort);
+    if (!scope.length && f.who === 'mine') { tbl.innerHTML = '<div class="card"><div class="empty"><div class="ico">🗂</div>Вам ещё не назначены шаблоны — выберите «Все», чтобы посмотреть список</div></div>'; return; }
+    if (!list.length) { tbl.innerHTML = '<div class="card"><div class="empty"><div class="ico">🔎</div>Ничего не найдено</div></div>'; return; }
+    const shown = list.slice(0, f.lim);
+    const dev = tplDev();
+    const assignBar = dev ? `<div class="toolbar" style="margin:0 0 10px"><span class="muted">Выбрано: <b>${S.tplSel.size}</b></span>
+        <select class="input" id="tplAssignTo" style="width:auto"><option value="">— исполнитель —</option>${users.map(u => `<option value="${esc(u.login)}">${esc(u.name)}</option>`).join('')}<option value="-">снять исполнителя</option></select>
+        <button class="btn small" data-act="tplAssign">Назначить выбранные</button>
+        <button class="btn small" data-act="tplAssignFree" title="Всем шаблонам без исполнителя">Назначить всем без исполнителя</button></div>` : '';
+    tbl.innerHTML = assignBar + `<div class="card table-wrap"><table class="t"><thead><tr>
+        ${dev ? `<th class="nosort" style="width:28px"><input type="checkbox" data-act="tplSelAll" ${shown.length && shown.every(t => S.tplSel.has(t.code)) ? 'checked' : ''}></th>` : ''}
+        <th class="nosort">Шаблон</th><th class="nosort">Разделы</th><th class="nosort">Замечания</th><th class="nosort">Данные</th><th class="nosort">Исполнитель</th><th class="nosort">Статус</th></tr></thead>
+      <tbody>${shown.map(t => { const n = sums.get(t.code); const pct = n.total ? Math.round(n.ok * 100 / n.total) : 0; return `<tr data-act="tplOpen" data-code="${esc(t.code)}">
+        ${dev ? `<td data-stop><input type="checkbox" data-act="tplSel" data-code="${esc(t.code)}" ${S.tplSel.has(t.code) ? 'checked' : ''}></td>` : ''}
+        <td data-l="Шаблон"><b class="mono">${esc(t.code)}</b>${grpTag(grpOf(t.code))}<div class="sub-line" style="max-width:420px">${esc(t.name)}</div><div class="sub-line">${esc(t.kind_type)}</div></td>
+        <td data-l="Разделы"><div class="tpl-prog"><i style="width:${pct}%"></i></div><span class="faint" style="font-size:12px">${n.ok} / ${n.total}${n.skip ? ` · пустых ${n.skip}` : ''}</span></td>
+        <td data-l="Замечания">${n.open ? `<span class="errn">${n.open}</span>` : ''}${n.rech ? ` <span class="pill interrupted" style="padding:1px 8px">${n.rech} перепр.</span>` : ''}${!n.open && !n.rech ? '<span class="faint">—</span>' : ''}</td>
+        <td data-l="Данные">${n.algBad ? `<span class="pill errors" title="алгоритмы разделов с ошибками — данные могут быть неверны не из-за шаблона" style="padding:1px 8px">алг. с ошибками: ${n.algBad}</span>` : '<span class="faint">—</span>'}</td>
+        <td data-l="Исполнитель">${who(t.assignee)}</td>
+        <td data-l="Статус">${tplPill(TPL_ST, n.status)}</td></tr>`; }).join('')}</tbody></table></div>
+      ${list.length > shown.length ? `<div style="text-align:center;margin:12px 0"><button class="btn" data-act="tplMore">Показать ещё (${list.length - shown.length})</button></div>` : `<div class="faint" style="text-align:center;margin:10px 0;font-size:12.5px">${list.length} ${plural(list.length, 'шаблон', 'шаблона', 'шаблонов')}</div>`}`;
+  }
+
+  function renderTplRems(rems) {
+    const f = S.f.tpl, T = S.tpl;
+    const cnt = st => rems.filter(r => st === 'active' ? remActive(remState(r)) : remState(r) === st).length;
+    const mb = (key, label, n) => `<button class="${f.rst === key ? 'on' : ''}" data-act="tplRst" data-key="${key}">${label}<span class="n">${n}</span></button>`;
+    $('#tplModes').innerHTML = mb('active', 'Активные', cnt('active')) + mb('open', 'Открытые', cnt('open')) + mb('fixed', 'Ждут выкладки', cnt('fixed'))
+      + mb('recheck', 'Перепроверить', cnt('recheck')) + mb('closed', 'Закрытые', cnt('closed')) + mb('rejected', 'Не ошибка', cnt('rejected')) + mb('all', 'Все', rems.length)
+      + `<select class="input" data-act="tplRtri" style="width:auto;margin-left:8px;padding:4px 8px"><option value="all">разбор: любой</option><option value="none" ${f.rtri === 'none' ? 'selected' : ''}>не разобраны</option>${Object.entries(TPL_TRIAGE).map(([k, v]) => `<option value="${k}" ${f.rtri === k ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select>`;
+    const q = f.q.trim().toLowerCase();
+    const list = rems.filter(r => {
+      const st = remState(r);
+      if (f.rst === 'active' ? !remActive(st) : f.rst !== 'all' && st !== f.rst) return false;
+      if (f.rtri === 'none' ? r.triage : f.rtri !== 'all' && r.triage !== f.rtri) return false;
+      return !q || [r.tpl_code, r.sec_code, r.actual, r.expected, r.doc, (T.byCode.get(r.tpl_code) || {}).name].some(v => v && String(v).toLowerCase().includes(q));
+    }).sort((a, b) => b.id - a.id);
+    const tbl = $('#tplTbl');
+    if (!list.length) { tbl.innerHTML = '<div class="card"><div class="empty"><div class="ico">✅</div>Замечаний нет</div></div>'; return; }
+    tbl.innerHTML = `<div class="card table-wrap"><table class="t"><thead><tr><th class="nosort">№</th><th class="nosort">Шаблон / раздел</th><th class="nosort">Что не так</th><th class="nosort">Тип</th><th class="nosort">Разбор</th><th class="nosort">Автор</th><th class="nosort">Состояние</th></tr></thead>
+      <tbody>${list.slice(0, 500).map(r => { const s = (T.secs.get(r.tpl_code) || []).find(x => x.sec_code === r.sec_code); return `<tr data-act="tplRem" data-id="${r.id}">
+        <td data-l="№" class="mono">${r.id}</td>
+        <td data-l="Шаблон"><b class="mono">${esc(r.tpl_code)}</b><div class="sub-line">${r.sec_code ? `${esc(r.sec_code)} ${esc(s ? s.sec_name : '')}` : 'шаблон целиком'}</div></td>
+        <td data-l="Что не так"><div style="max-width:380px;white-space:pre-wrap;overflow:hidden;max-height:3.9em">${esc(r.actual)}</div>${T.files.get(r.id) ? `<span class="faint" style="font-size:12px">📎 ${T.files.get(r.id)}</span>` : ''}</td>
+        <td data-l="Тип">${esc(TPL_TYPES[r.type] || r.type)}<div class="sub-line">${esc(TPL_SEV[r.severity] || '')}</div></td>
+        <td data-l="Разбор">${r.triage ? esc(TPL_TRIAGE[r.triage]) : '<span class="faint">не разобрано</span>'}</td>
+        <td data-l="Автор">${who(r.by_login)}<div class="sub-line">${fmtDT(r.at)}</div></td>
+        <td data-l="Состояние">${tplPill(TPL_REM, remState(r))}${r.fixed_release ? `<div class="sub-line">в ${esc(relName(r.fixed_release))}</div>` : ''}</td></tr>`; }).join('')}</tbody></table></div>
+      <div class="faint" style="text-align:center;margin:10px 0;font-size:12.5px">${list.length} ${plural(list.length, 'замечание', 'замечания', 'замечаний')}${list.length > 500 ? ' · показаны первые 500' : ''}</div>`;
+  }
+
+  // ---------- карточка шаблона
+  function tplOpen(code) {
+    const t = S.tpl.byCode.get(code);
+    if (!t) return;
+    S.tplOpenCode = code;
+    const ov = modal(`<span class="mono">${esc(t.code)}</span> <span style="font-weight:500">${esc(t.name)}</span>`, tplCardBody(t), '<button class="btn" data-act="closeModal">Закрыть</button>');
+    $('.modal', ov).classList.add('wide');
+  }
+  function tplRefreshCard() {
+    const mb = $('.modal-layer .mb');
+    const t = S.tplOpenCode && S.tpl.byCode.get(S.tplOpenCode);
+    if (mb && t && $('.modal-layer [data-tplcard]')) { const y = mb.scrollTop; mb.innerHTML = tplCardBody(t); mb.scrollTop = y; }
+  }
+  function tplCardBody(t) {
+    const n = tplSum(t), secs = S.tpl.secs.get(t.code) || [], can = canTpl(), dev = tplDev();
+    const k = kindByCode(t.code);
+    const rems = (S.tpl.remByTpl.get(t.code) || []).slice().sort((a, b) => b.id - a.id);
+    const algPill = a => { const st = algSt(a); return st === 'ok' ? '<span class="pill ok" style="padding:1px 8px">работает</span>' : st === 'bad' ? '<span class="pill errors" style="padding:1px 8px">ошибки</span>' : st === 'srv' ? '<span class="pill srvp" style="padding:1px 8px">серверные</span>' : '<span class="pill plain" style="padding:1px 8px">не запускался</span>'; };
+    const deployedId = S.tpl.deployed ? S.tpl.deployed.id : 0;
+    return `<div data-tplcard>
+      <div class="meta-grid" style="margin-bottom:14px">
+        <div class="mg"><div class="l">Статус</div><div class="v">${tplPill(TPL_ST, n.status)}</div></div>
+        <div class="mg"><div class="l">Тип</div><div class="v" style="font-size:13px">${esc(t.kind_type || '—')}</div></div>
+        <div class="mg"><div class="l">Разделов проверено</div><div class="v">${n.ok} / ${n.total}</div></div>
+        <div class="mg"><div class="l">Исполнитель</div><div class="v" style="font-size:13px">${dev ? `<select class="input" data-act="tplAssignOne" style="padding:3px 6px"><option value="">не назначен</option>${tplTeam().map(u => `<option value="${esc(u.login)}" ${t.assignee === u.login ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}</select>` : who(t.assignee)}</div></div>
+      </div>
+      <div class="section" style="margin-top:0"><h4>Документ для проверки</h4>
+        <div class="muted" style="font-size:13px;margin-bottom:6px">Сформируйте печатную форму этого документа в 2.0 и в 1.0 и сравните.${k && k.guid ? ` Документ первого этапа перепроверки: <span class="mono">${esc(k.guid)}</span>${k.ps ? ` · ${esc(psLabel(k.ps))}` : ''}` : ''}</div>
+        <input class="input" data-act="tplDoc" placeholder="Код или GUID документа, на котором проверяете" value="${esc(t.doc || '')}" ${can ? '' : 'disabled'} style="width:100%"></div>
+      <div class="section"><h4>Общая проверка шаблона</h4><div class="tpl-checks">${TPL_CHECK.map(([key, label]) => `<label class="check"><input type="checkbox" data-act="tplCheck" data-key="${key}" ${(t.checklist || {})[key] ? 'checked' : ''} ${can ? '' : 'disabled'}> ${esc(label)}</label>`).join('')}</div></div>
+      <div class="section"><h4>Разделы <span class="faint" style="font-weight:500">— каждый раздел: «Без замечаний» или «Замечание»</span></h4>
+        <div class="table-wrap"><table class="t"><thead><tr><th class="nosort">№</th><th class="nosort">Раздел</th><th class="nosort">Данные (алгоритм)</th><th class="nosort">Статус</th><th class="nosort"></th></tr></thead><tbody>
+        ${secs.map(s => { const st = secState(t.code, s), m = S.tpl.marks.get(t.code + '|' + s.sec_code);
+          const changed = m && m.ok && s.changed_release && s.changed_release > (m.release_id || 0) && s.changed_release <= deployedId;
+          const warn = (s.warnings || []).length; return `<tr style="cursor:default">
+          <td data-l="№"><span class="sec-no small">${s.sec_order ?? '·'}</span></td>
+          <td data-l="Раздел">${esc(s.sec_name || s.sec_code)}<div class="sub-line mono" style="max-width:360px">${esc(s.sec_code)}${s.pdf_pages ? ` · ${s.pdf_pages} стр.` : ''}${warn ? ` · <span style="color:var(--int)" title="${esc((s.warnings || []).join('\n'))}">предупреждений сборки: ${warn}</span>` : ''}</div></td>
+          <td data-l="Данные">${s.alg ? `${algPill(s.alg)}<div class="sub-line mono" style="max-width:260px" title="${esc(s.alg)}">${esc(s.alg)}</div>` : '<span class="faint">—</span>'}</td>
+          <td data-l="Статус">${tplPill(TPL_SEC, st)}${m && m.ok ? `<div class="sub-line">${esc(userName(m.by_login))}, ${fmtDT(m.at)}</div>` : ''}${changed ? '<div class="sub-line" style="color:var(--int)">шаблон изменён после проверки</div>' : ''}</td>
+          <td data-l="" style="white-space:nowrap">${can && st !== 'skip' ? `${st === 'ok' ? `<button class="btn small ghost" data-act="tplUnmark" data-sec="${esc(s.sec_code)}" title="Снять отметку">снять</button>` : st === 'todo' ? `<button class="btn small ok-on" data-act="tplMark" data-sec="${esc(s.sec_code)}">${I.check}Без замечаний</button>` : ''}
+            <button class="btn small" data-act="tplNew" data-sec="${esc(s.sec_code)}">${I.flag}Замечание</button>` : ''}</td></tr>`; }).join('')}
+        </tbody></table></div>
+        ${can ? `<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn small" data-act="tplNew" data-sec="">${I.flag}Замечание к шаблону целиком</button>
+          ${secs.some(s => secState(t.code, s) === 'todo') ? `<button class="btn small ghost" data-act="tplMarkAll" title="Отметить все непроверенные разделы «Без замечаний»">${I.check}Все непроверенные — без замечаний</button>` : ''}</div>` : ''}</div>
+      <div class="section"><h4>Замечания (${rems.length})</h4>
+        ${rems.length ? rems.map(r => `<div class="tpl-rem" data-act="tplRem" data-id="${r.id}"><span class="mono faint">№${r.id}</span> ${tplPill(TPL_REM, remState(r))}
+          <b>${r.sec_code ? esc(r.sec_code) : 'шаблон целиком'}</b> · ${esc(TPL_TYPES[r.type] || r.type)}${S.tpl.files.get(r.id) ? ` · 📎${S.tpl.files.get(r.id)}` : ''}
+          <div class="muted" style="white-space:pre-wrap;max-height:2.8em;overflow:hidden">${esc(r.actual)}</div></div>`).join('') : '<div class="faint">Замечаний нет</div>'}</div>
+    </div>`;
+  }
+
+  async function tplSaveTemplate(code, patch) {
+    tplChk(await tplSb().from('tpl_templates').update(patch).eq('code', code));
+    Object.assign(S.tpl.byCode.get(code), patch);
+  }
+  async function tplMark(code, secCodes, ok) {
+    const sb = tplSb();
+    if (ok) {
+      const rel = S.tpl.deployed ? S.tpl.deployed.id : null;
+      const rows = secCodes.map(sec => ({ tpl_code: code, sec_code: sec, ok: true, by_login: S.me.login, at: new Date().toISOString(), release_id: rel }));
+      tplChk(await sb.from('tpl_marks').upsert(rows));
+      rows.forEach(r => S.tpl.marks.set(code + '|' + r.sec_code, r));
+    } else {
+      for (const sec of secCodes) { tplChk(await sb.from('tpl_marks').delete().eq('tpl_code', code).eq('sec_code', sec)); S.tpl.marks.delete(code + '|' + sec); }
+    }
+    tplRefreshCard();
+    renderShell();
+  }
+
+  // ---------- новое замечание
+  function tplNew(code, sec) {
+    const t = S.tpl.byCode.get(code), secs = S.tpl.secs.get(code) || [];
+    S.tplDraft = { code, files: [], side: 'new' };
+    const ov = modal(`Замечание · <span class="mono">${esc(code)}</span>`, `
+      <div class="tpl-form">
+        <label>Раздел<select class="input" id="tnSec"><option value="">Шаблон целиком</option>${secs.map(s => `<option value="${esc(s.sec_code)}" ${s.sec_code === sec ? 'selected' : ''}>${esc((s.sec_order ?? '') + ' · ' + (s.sec_name || s.sec_code))}</option>`).join('')}</select></label>
+        <div class="tpl-2"><label>Что не так<select class="input" id="tnType">${Object.entries(TPL_TYPES).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('')}</select></label>
+          <label>Важность<select class="input" id="tnSev">${Object.entries(TPL_SEV).map(([k, v]) => `<option value="${k}" ${k === 'mid' ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></label></div>
+        <label>Документ, на котором увидели<input class="input" id="tnDoc" value="${esc(t.doc || '')}" placeholder="код или GUID документа"></label>
+        <label>Как сейчас (2.0) <span class="faint">— обязательно</span><textarea class="input" id="tnActual" rows="4" placeholder="Что именно не так: где, какое поле, что выводится"></textarea></label>
+        <label>Как должно быть (как в 1.0)<textarea class="input" id="tnExpected" rows="3" placeholder="Как выглядит в 1.0 / что должно быть"></textarea></label>
+        <div><div style="font-weight:600;font-size:13px;margin-bottom:6px">Скриншоты и PDF <span class="faint" style="font-weight:500">— выберите область и вставьте Ctrl+V, перетащите файл или нажмите на область</span></div>
+          <div class="tpl-2">${['old', 'new'].map(side => `<div class="tpl-zone ${side === 'new' ? 'on' : ''}" data-act="tplZone" data-side="${side}"><b>${side === 'old' ? 'Как в 1.0' : 'Как в 2.0'}</b><div class="faint" style="font-size:12px">Ctrl+V / перетащить / нажать</div><div class="tpl-thumbs" id="tz-${side}"></div></div>`).join('')}</div>
+          <input type="file" id="tnFile" accept="image/*,application/pdf" multiple hidden></div>
+      </div>`, `<button class="btn" data-act="tplBack">Отмена</button><button class="btn primary" data-act="tplCreate">Сохранить замечание</button>`);
+    $('.modal', ov).classList.add('wide');
+    $$('.tpl-zone', ov).forEach(z => {
+      z.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); z.classList.add('drag'); });
+      z.addEventListener('dragleave', () => z.classList.remove('drag'));
+      z.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); z.classList.remove('drag'); tplAddDraft([...e.dataTransfer.files], z.dataset.side); });
+    });
+    $('#tnFile').onchange = e => { tplAddDraft([...e.target.files], S.tplDraft.side); e.target.value = ''; };
+    setTimeout(() => { const a = $('#tnActual'); if (a) a.focus(); }, 50);
+  }
+  const TPL_MIME = /^(image\/(png|jpeg|gif|webp|bmp)|application\/pdf)$/;
+  function tplAddDraft(files, side) {
+    if (!S.tplDraft) return;
+    for (const f of files) {
+      if (!TPL_MIME.test(f.type)) { toast('Можно только картинки и PDF: ' + f.name, true); continue; }
+      if (f.size > 15 * 1024 * 1024) { toast('Файл больше 15 МБ: ' + f.name, true); continue; }
+      S.tplDraft.files.push({ file: f, side, url: f.type.startsWith('image/') ? URL.createObjectURL(f) : null });
+    }
+    tplDraftThumbs();
+  }
+  function tplDraftThumbs() {
+    ['old', 'new'].forEach(side => {
+      const el = $('#tz-' + side);
+      if (!el) return;
+      el.innerHTML = S.tplDraft.files.map((x, i) => x.side !== side ? '' : `<span class="tpl-th">${x.url ? `<img src="${x.url}" alt="">` : `<span class="pdf">PDF</span>`}<span class="nm">${esc(x.file.name || 'скриншот')}</span><button class="btn ghost icon" data-act="tplDraftDel" data-i="${i}" title="Убрать">${I.x}</button></span>`).join('');
+    });
+  }
+  async function tplUpload(remarkId, items) {
+    const sb = tplSb();
+    for (let i = 0; i < items.length; i++) {
+      const { file, side } = items[i];
+      const ext = file.type === 'application/pdf' ? 'pdf' : (file.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+      const path = `${remarkId}/${Date.now()}_${i}.${ext}`;
+      const up = await sb.storage.from('tpl-files').upload(path, file, { contentType: file.type, upsert: false });
+      if (up.error) throw new Error('файл ' + (file.name || '') + ': ' + up.error.message);
+      tplChk(await sb.from('tpl_files').insert({ remark_id: remarkId, path, name: file.name || `скриншот_${i + 1}.${ext}`, size: file.size, mime: file.type, side, by_login: S.me.login }));
+    }
+  }
+  async function tplCreate(btn) {
+    const d = S.tplDraft;
+    const actual = $('#tnActual').value.trim();
+    if (!actual) { toast('Опишите, что не так', true); $('#tnActual').focus(); return; }
+    btn.disabled = true; btn.innerHTML = '<span class="spin"></span>';
+    try {
+      const row = tplChk(await tplSb().from('tpl_remarks').insert({ tpl_code: d.code, sec_code: $('#tnSec').value || null, doc: $('#tnDoc').value.trim() || null,
+        type: $('#tnType').value, severity: $('#tnSev').value, actual, expected: $('#tnExpected').value.trim(), by_login: S.me.login }).select('id').single());
+      await tplUpload(row.id, d.files);
+      const t = S.tpl.byCode.get(d.code);
+      if (!t.doc && $('#tnDoc').value.trim()) await tplSaveTemplate(d.code, { doc: $('#tnDoc').value.trim() });
+      S.tplDraft = null;
+      toast('Замечание №' + row.id + ' сохранено');
+      await tplReload(() => tplOpen(d.code));
+    } catch (e) { toast(e.message || String(e), true); btn.disabled = false; btn.textContent = 'Сохранить замечание'; }
+  }
+
+  // ---------- карточка замечания
+  async function tplRem(id) {
+    const r = S.tpl.remById.get(id);
+    if (!r) return;
+    const sb = tplSb();
+    const [cm, fl] = await Promise.all([
+      sb.from('tpl_comments').select('*').eq('remark_id', id).order('id'),
+      sb.from('tpl_files').select('*').eq('remark_id', id).order('id'),
+    ]);
+    const comments = tplChk(cm), files = tplChk(fl);
+    let urls = {};
+    if (files.length) {
+      const su = await sb.storage.from('tpl-files').createSignedUrls(files.map(f => f.path), 3600);
+      if (!su.error) su.data.forEach(x => { urls[x.path] = x.signedUrl; });
+    }
+    S.tplRemOpen = id;
+    const t = S.tpl.byCode.get(r.tpl_code), s = (S.tpl.secs.get(r.tpl_code) || []).find(x => x.sec_code === r.sec_code);
+    const st = remState(r), dev = tplDev(), can = canTpl();
+    const fileHtml = side => files.filter(f => (f.side || 'new') === side).map(f => `<a class="tpl-th" href="${esc(urls[f.path] || '#')}" target="_blank" rel="noopener">${(f.mime || '').startsWith('image/') && urls[f.path] ? `<img src="${esc(urls[f.path])}" alt="">` : '<span class="pdf">PDF</span>'}<span class="nm">${esc(f.name)}</span></a>`).join('') || '<span class="faint" style="font-size:12px">нет</span>';
+    const rels = S.tpl.rel.slice().reverse();
+    const ov = modal(`Замечание №${r.id} · <span class="mono">${esc(r.tpl_code)}</span>`, `
+      <div class="meta-grid" style="margin-bottom:12px">
+        <div class="mg"><div class="l">Состояние</div><div class="v">${tplPill(TPL_REM, st)}</div></div>
+        <div class="mg"><div class="l">Раздел</div><div class="v" style="font-size:13px">${r.sec_code ? `${esc(r.sec_code)} · ${esc(s ? s.sec_name : '')}` : 'шаблон целиком'}</div></div>
+        <div class="mg"><div class="l">Тип · важность</div><div class="v" style="font-size:13px">${esc(TPL_TYPES[r.type] || r.type)} · ${esc(TPL_SEV[r.severity] || '')}</div></div>
+        <div class="mg"><div class="l">Автор</div><div class="v" style="font-size:13px">${who(r.by_login)} <span class="faint">${fmtDT(r.at)}</span></div></div>
+      </div>
+      ${r.doc ? `<div class="muted" style="margin-bottom:10px;font-size:13px">Документ: <span class="mono">${esc(r.doc)}</span></div>` : ''}
+      <div class="section" style="margin-top:0"><h4>Как сейчас (2.0)</h4><div style="white-space:pre-wrap">${esc(r.actual)}</div></div>
+      ${r.expected ? `<div class="section"><h4>Как должно быть (1.0)</h4><div style="white-space:pre-wrap">${esc(r.expected)}</div></div>` : ''}
+      <div class="section"><h4>Файлы</h4><div class="tpl-2"><div><div class="faint" style="font-size:12px;margin-bottom:4px">Как в 1.0</div><div class="tpl-thumbs">${fileHtml('old')}</div></div>
+        <div><div class="faint" style="font-size:12px;margin-bottom:4px">Как в 2.0</div><div class="tpl-thumbs">${fileHtml('new')}</div></div></div>
+        ${can && remActive(st) ? `<button class="btn small" style="margin-top:8px" data-act="tplMoreFiles">Добавить файлы</button><input type="file" id="tmFile" accept="image/*,application/pdf" multiple hidden>` : ''}</div>
+      <div class="section"><h4>Разбор${r.triage_by ? ` <span class="faint" style="font-weight:500">— ${esc(userName(r.triage_by))}</span>` : ''}</h4>
+        ${dev ? `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select class="input" data-act="tplTriage" style="width:auto"><option value="">не разобрано</option>${Object.entries(TPL_TRIAGE).map(([k, v]) => `<option value="${k}" ${r.triage === k ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select>
+          ${st === 'open' ? `<select class="input" id="tmRel" style="width:auto">${rels.map(x => `<option value="${x.id}">${esc(x.name)}${x.deployed_at ? ' (на сервере)' : ''}</option>`).join('')}</select><button class="btn small" data-act="tplFix">Исправлено в этой сборке</button>` : ''}</div>`
+          : `<div>${r.triage ? esc(TPL_TRIAGE[r.triage]) : '<span class="faint">ещё не разобрано</span>'}</div>`}
+        ${r.fixed_release ? `<div class="muted" style="margin-top:6px;font-size:13px">Исправлено в сборке <b>${esc(relName(r.fixed_release))}</b>${r.fixed_by ? ` (${esc(userName(r.fixed_by))}, ${fmtDT(r.fixed_at)})` : ''}${st === 'fixed' ? ' — после выкладки на сервер уйдёт на перепроверку' : ''}</div>` : ''}</div>
+      <div class="section"><h4>Обсуждение</h4>
+        <div class="tpl-cmts">${comments.map(c => `<div class="tpl-cmt ${c.sys ? 'sys' : ''}">${c.sys ? '' : avatar(c.by_login)}<div><div class="faint" style="font-size:12px">${esc(userName(c.by_login))} · ${fmtDT(c.at)}</div><div style="white-space:pre-wrap">${esc(c.text)}</div></div></div>`).join('') || '<div class="faint">Пока пусто</div>'}</div>
+        ${can ? `<textarea class="input" id="tmText" rows="2" style="width:100%;margin-top:8px" placeholder="${st === 'recheck' ? 'Если не исправлено — опишите, что осталось' : 'Комментарий'}"></textarea>` : ''}</div>`,
+      `<button class="btn" data-act="tplBackTo" data-code="${esc(r.tpl_code)}">${I.left}К шаблону</button>
+       ${can ? '<button class="btn" data-act="tplComment">Отправить комментарий</button>' : ''}
+       ${can && st === 'recheck' ? '<button class="btn danger" data-act="tplReopen">Не исправлено</button><button class="btn primary" data-act="tplConfirm">Исправлено — закрыть</button>' : ''}
+       ${can && (st === 'closed' || st === 'rejected') ? '<button class="btn" data-act="tplReopen">Открыть снова</button>' : ''}
+       ${dev && st === 'open' ? '<button class="btn" data-act="tplReject">Не ошибка</button>' : ''}
+       ${can && (r.by_login === S.me.login || dev) && st === 'open' ? '<button class="btn danger ghost" data-act="tplDelRem">Удалить</button>' : ''}`);
+    $('.modal', ov).classList.add('wide');
+    const fi = $('#tmFile');
+    if (fi) fi.onchange = async e => { const items = [...e.target.files].filter(f => TPL_MIME.test(f.type)).map(f => ({ file: f, side: 'new' })); if (!items.length) return;
+      await safe(async () => { await tplUpload(r.id, items); }, 'Файлы добавлены'); await tplReload(() => tplRem(r.id)); };
+  }
+  async function tplComment(id, text, sys) {
+    tplChk(await tplSb().from('tpl_comments').insert({ remark_id: id, by_login: S.me.login, text, sys: !!sys }));
+  }
+  async function tplRemUpdate(id, patch, sysText) {
+    tplChk(await tplSb().from('tpl_remarks').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id));
+    if (sysText) await tplComment(id, sysText, true);
+  }
+
+  // ---------- выгрузка замечаний для исправления шаблонов (zip: README.md, remarks.json, файлы)
+  function tplExportDlg() {
+    modal('Выгрузка замечаний', `<div class="muted" style="margin-bottom:10px">Архив для исправления шаблонов: описание замечаний (README.md, remarks.json) и все скриншоты/PDF.</div>
+      <label class="check"><input type="radio" name="tex" value="template" checked> Открытые, разобраны как «Шаблон»</label><br>
+      <label class="check"><input type="radio" name="tex" value="open"> Все открытые (в т. ч. не разобранные)</label><br>
+      <label class="check"><input type="radio" name="tex" value="active"> Все активные (открытые, ждут выкладки, перепроверка)</label>`,
+      '<button class="btn" data-act="closeModal">Отмена</button><button class="btn primary" data-act="tplExportGo">Скачать архив</button>');
+  }
+  async function tplExportGo(btn) {
+    const mode = ($('input[name="tex"]:checked') || {}).value || 'template';
+    const list = S.tpl.rems.filter(r => { const st = remState(r); return mode === 'template' ? st === 'open' && r.triage === 'template' : mode === 'open' ? st === 'open' : remActive(st); })
+      .sort((a, b) => a.tpl_code.localeCompare(b.tpl_code, 'ru', { numeric: true }) || String(a.sec_code || '').localeCompare(String(b.sec_code || ''), 'ru', { numeric: true }) || a.id - b.id);
+    if (!list.length) { toast('Нет замечаний для выгрузки', true); return; }
+    btn.disabled = true; btn.innerHTML = '<span class="spin"></span>';
+    try {
+      if (!window.JSZip) await tplLoadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
+      const sb = tplSb(), ids = list.map(r => r.id);
+      const comments = [], files = [];
+      for (let i = 0; i < ids.length; i += 150) {
+        comments.push(...tplChk(await sb.from('tpl_comments').select('*').in('remark_id', ids.slice(i, i + 150)).order('id')));
+        files.push(...tplChk(await sb.from('tpl_files').select('*').in('remark_id', ids.slice(i, i + 150)).order('id')));
+      }
+      const zip = new window.JSZip();
+      const secName = r => { const s = (S.tpl.secs.get(r.tpl_code) || []).find(x => x.sec_code === r.sec_code); return s ? s : null; };
+      const out = [], md = [`# Замечания по шаблонам печатных форм — ${fmtDT(new Date(), true)}`, '', `Сборка на сайте: ${S.tpl.latest ? S.tpl.latest.name : '—'}; на сервере: ${S.tpl.deployed ? S.tpl.deployed.name : '—'}. Замечаний: ${list.length}.`, ''];
+      let cur = '';
+      for (const r of list) {
+        const t = S.tpl.byCode.get(r.tpl_code) || {}, s = secName(r);
+        const fl = files.filter(f => f.remark_id === r.id), cm = comments.filter(c => c.remark_id === r.id);
+        const fnames = [];
+        for (const f of fl) {
+          const d = await sb.storage.from('tpl-files').download(f.path);
+          if (d.error) continue;
+          const nm = `files/${r.id}_${f.side === 'old' ? '1.0' : '2.0'}_${f.id}.${f.path.split('.').pop()}`;
+          zip.file(nm, d.data);
+          fnames.push({ file: nm, side: f.side === 'old' ? '1.0' : '2.0', name: f.name });
+        }
+        if (cur !== r.tpl_code) { cur = r.tpl_code; md.push(`## ${r.tpl_code} — ${t.name || ''}`, ''); }
+        md.push(`### №${r.id} · ${r.sec_code ? `раздел ${r.sec_code} ${s ? '«' + s.sec_name + '»' : ''}${s && s.file ? ` (\`${s.file}\`)` : ''}` : 'шаблон целиком'}`,
+          `- Тип: ${TPL_TYPES[r.type] || r.type}; важность: ${TPL_SEV[r.severity] || r.severity}; разбор: ${r.triage ? TPL_TRIAGE[r.triage] : 'не разобрано'}; состояние: ${(TPL_REM[remState(r)] || [remState(r)])[0]}`,
+          `- Автор: ${userName(r.by_login)}, ${fmtDT(r.at, true)}${r.doc ? `; документ: ${r.doc}` : ''}`, '', '**Как сейчас (2.0):**', '', r.actual, '');
+        if (r.expected) md.push('**Как должно быть (1.0):**', '', r.expected, '');
+        if (fnames.length) md.push('**Файлы:** ' + fnames.map(x => `[${x.side}] ${x.file}`).join(', '), '');
+        const human = cm.filter(c => !c.sys);
+        if (human.length) md.push('**Обсуждение:**', '', ...human.map(c => `- ${userName(c.by_login)} (${fmtDT(c.at, true)}): ${c.text.replace(/\n/g, ' ')}`), '');
+        out.push({ id: r.id, template: r.tpl_code, template_name: t.name || '', section: r.sec_code, section_name: s ? s.sec_name : null, section_file: s ? s.file : null,
+          type: r.type, type_ru: TPL_TYPES[r.type] || r.type, severity: r.severity, triage: r.triage, state: remState(r), doc: r.doc, actual: r.actual, expected: r.expected,
+          author: userName(r.by_login), at: r.at, files: fnames, comments: human.map(c => ({ by: userName(c.by_login), at: c.at, text: c.text })) });
+      }
+      zip.file('README.md', md.join('\n'));
+      zip.file('remarks.json', JSON.stringify(out, null, 2));
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = `замечания_шаблонов_${stamp()}.zip`;
+      document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+      closeModal();
+      toast(`Выгружено замечаний: ${list.length}`);
+    } catch (e) { toast(e.message || String(e), true); btn.disabled = false; btn.textContent = 'Скачать архив'; }
+  }
+
+  // ---------- обработчики раздела
+  document.addEventListener('click', async e => {
+    const t = e.target.closest('[data-act]');
+    const act = t && t.dataset.act;
+    if (!act || !act.startsWith('tpl') || !S.tpl) return;
+    if (t.tagName === 'A') e.preventDefault();
+    const write = !['tplOpen', 'tplRem', 'tplView', 'tplSt', 'tplRst', 'tplMore', 'tplBackTo', 'tplBack', 'tplExport', 'tplExportGo', 'tplSelAll', 'tplSel', 'tplZone'].includes(act);
+    if (write && !canTpl()) { toast('Наблюдатель только просматривает', true); return; }
+    const code = S.tplOpenCode;
+    switch (act) {
+      case 'tplOpen': tplOpen(t.dataset.code); break;
+      case 'tplView': S.f.tpl.view = t.dataset.key; renderTpl(); break;
+      case 'tplSt': S.f.tpl.st = t.dataset.key; S.f.tpl.lim = 200; renderTpl(); break;
+      case 'tplRst': S.f.tpl.rst = t.dataset.key; renderTpl(); break;
+      case 'tplMore': S.f.tpl.lim += 200; renderTpl(); break;
+      case 'tplMark': await safe(() => tplMark(code, [t.dataset.sec], true)); break;
+      case 'tplUnmark': await safe(() => tplMark(code, [t.dataset.sec], false)); break;
+      case 'tplMarkAll': {
+        const secs = (S.tpl.secs.get(code) || []).filter(s => secState(code, s) === 'todo').map(s => s.sec_code);
+        if (secs.length && confirm(`Отметить ${secs.length} ${plural(secs.length, 'раздел', 'раздела', 'разделов')} «Без замечаний»?`)) await safe(() => tplMark(code, secs, true));
+        break;
+      }
+      case 'tplNew': tplNew(code, t.dataset.sec || ''); break;
+      case 'tplZone': if (S.tplDraft) { S.tplDraft.side = t.dataset.side; $$('.tpl-zone').forEach(z => z.classList.toggle('on', z === t)); if (!e.target.closest('.tpl-th')) $('#tnFile').click(); } break;
+      case 'tplDraftDel': e.stopPropagation(); if (S.tplDraft) { S.tplDraft.files.splice(+t.dataset.i, 1); tplDraftThumbs(); } break;
+      case 'tplCreate': await tplCreate(t); break;
+      case 'tplBack': S.tplDraft = null; tplOpen(code); break;
+      case 'tplBackTo': tplOpen(t.dataset.code); break;
+      case 'tplRem': await safe(() => tplRem(+t.dataset.id)); break;
+      case 'tplMoreFiles': $('#tmFile').click(); break;
+      case 'tplComment': {
+        const txt = ($('#tmText') || {}).value || '';
+        if (!txt.trim()) { toast('Напишите комментарий', true); break; }
+        const id = S.tplRemOpen;
+        await safe(() => tplComment(id, txt.trim()));
+        await safe(() => tplRem(id));
+        break;
+      }
+      case 'tplFix': {
+        const id = S.tplRemOpen, rel = +$('#tmRel').value;
+        await safe(() => tplRemUpdate(id, { state: 'fixed', fixed_release: rel, fixed_by: S.me.login, fixed_at: new Date().toISOString(), triage: S.tpl.remById.get(id).triage || 'template', triage_by: S.tpl.remById.get(id).triage_by || S.me.login },
+          `Исправлено в сборке ${relName(rel)}`));
+        await tplReload(() => tplRem(id));
+        break;
+      }
+      case 'tplReject': {
+        const id = S.tplRemOpen, txt = (($('#tmText') || {}).value || '').trim();
+        await safe(() => tplRemUpdate(id, { state: 'rejected', triage: 'notbug', triage_by: S.me.login, closed_by: S.me.login, closed_at: new Date().toISOString() }, 'Не ошибка' + (txt ? ': ' + txt : '')));
+        await tplReload(() => tplRem(id));
+        break;
+      }
+      case 'tplConfirm': {
+        const id = S.tplRemOpen;
+        await safe(() => tplRemUpdate(id, { state: 'closed', closed_by: S.me.login, closed_at: new Date().toISOString() }, 'Проверено на сервере — исправлено, закрыто'));
+        await tplReload(() => tplRem(id));
+        break;
+      }
+      case 'tplReopen': {
+        const id = S.tplRemOpen, txt = (($('#tmText') || {}).value || '').trim();
+        if (!txt) { toast('Опишите, что не исправлено', true); const el = $('#tmText'); if (el) el.focus(); break; }
+        await safe(() => tplRemUpdate(id, { state: 'open', fixed_release: null, fixed_by: null, fixed_at: null, closed_by: null, closed_at: null }, 'Открыто снова: ' + txt));
+        await tplReload(() => tplRem(id));
+        break;
+      }
+      case 'tplDelRem': {
+        const id = S.tplRemOpen, r = S.tpl.remById.get(id);
+        if (!confirm(`Удалить замечание №${id} вместе с файлами? Это не отменить.`)) break;
+        await safe(async () => {
+          const fl = tplChk(await tplSb().from('tpl_files').select('path').eq('remark_id', id));
+          if (fl.length) await tplSb().storage.from('tpl-files').remove(fl.map(f => f.path));
+          tplChk(await tplSb().from('tpl_remarks').delete().eq('id', id));
+        }, 'Замечание удалено');
+        await tplReload(() => tplOpen(r.tpl_code));
+        break;
+      }
+      case 'tplDeploy': {
+        const L = S.tpl.latest;
+        modal('Сборка выложена на сервер', `<div>Отметить, что сборка <b>${esc(L.name)}</b> залита на сервер?</div><div class="muted" style="margin-top:8px">Замечания, исправленные в ${esc(L.name)}, уйдут тестировщицам на перепроверку.</div>`,
+          `<button class="btn" data-act="closeModal">Отмена</button><button class="btn primary" data-act="tplDeployGo">Да, залил</button>`);
+        break;
+      }
+      case 'tplDeployGo': {
+        const L = S.tpl.latest;
+        await safe(async () => tplChk(await tplSb().rpc('tpl_deploy', { p_release: L.id })), `${L.name} отмечена как выложенная`);
+        closeModal();
+        await tplReload();
+        break;
+      }
+      case 'tplExport': tplExportDlg(); break;
+      case 'tplExportGo': await tplExportGo(t); break;
+      case 'tplAssign': case 'tplAssignFree': {
+        const to = ($('#tplAssignTo') || {}).value;
+        if (!to) { toast('Выберите исполнителя', true); break; }
+        const codes = act === 'tplAssign' ? [...S.tplSel] : S.tpl.tpls.filter(x => !x.assignee).map(x => x.code);
+        if (!codes.length) { toast(act === 'tplAssign' ? 'Отметьте шаблоны галочками' : 'Все шаблоны уже назначены', true); break; }
+        const login = to === '-' ? null : to;
+        await safe(async () => {
+          for (let i = 0; i < codes.length; i += 200) tplChk(await tplSb().from('tpl_templates').update({ assignee: login }).in('code', codes.slice(i, i + 200)));
+          codes.forEach(c => { S.tpl.byCode.get(c).assignee = login; });
+        }, `Назначено: ${codes.length}`);
+        S.tplSel.clear();
+        renderTpl(); renderShell();
+        break;
+      }
+    }
+  });
+  document.addEventListener('change', async e => {
+    const t = e.target, act = t.dataset && t.dataset.act;
+    if (!act || !act.startsWith('tpl') || !S.tpl) return;
+    const code = S.tplOpenCode;
+    if (act === 'tplWho') { S.f.tpl.who = t.value; S.f.tpl.lim = 200; S.tplSel.clear(); renderTpl(); return; }
+    if (act === 'tplRtri') { S.f.tpl.rtri = t.value; renderTpl(); return; }
+    if (act === 'tplSel') { if (t.checked) S.tplSel.add(t.dataset.code); else S.tplSel.delete(t.dataset.code); renderTpl(); return; }
+    if (act === 'tplSelAll') { $$('input[data-act="tplSel"]').forEach(x => { if (t.checked) S.tplSel.add(x.dataset.code); else S.tplSel.delete(x.dataset.code); }); renderTpl(); return; }
+    if (!canTpl()) return;
+    if (act === 'tplDoc') await safe(() => tplSaveTemplate(code, { doc: t.value.trim() || null }), 'Документ сохранён');
+    else if (act === 'tplCheck') {
+      const tt = S.tpl.byCode.get(code);
+      const cl = { ...(tt.checklist || {}), [t.dataset.key]: t.checked };
+      await safe(() => tplSaveTemplate(code, { checklist: cl }));
+      tplRefreshCard(); renderShell();
+    } else if (act === 'tplAssignOne' && tplDev()) { await safe(() => tplSaveTemplate(code, { assignee: t.value || null }), 'Исполнитель назначен'); renderShell(); }
+    else if (act === 'tplTriage' && tplDev()) {
+      const id = S.tplRemOpen;
+      await safe(() => tplRemUpdate(id, { triage: t.value || null, triage_by: t.value ? S.me.login : null }, t.value ? 'Разбор: ' + TPL_TRIAGE[t.value] : 'Разбор снят'));
+      await tplReload(() => tplRem(id));
+    }
+  });
+  document.addEventListener('input', e => {
+    if (e.target.dataset && e.target.dataset.act === 'tplq' && S.tpl) { S.f.tpl.q = e.target.value; S.f.tpl.lim = 200; renderTpl(); const q = $('#q-tpl'); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }
+  });
+  // вставка скриншота из буфера (Ctrl+V) в форму замечания
+  document.addEventListener('paste', e => {
+    if (!S.tplDraft || !$('#tnActual')) return;
+    const files = [...(e.clipboardData && e.clipboardData.items || [])].filter(i => i.kind === 'file').map(i => i.getAsFile()).filter(Boolean);
+    if (!files.length) return;
+    e.preventDefault();
+    tplAddDraft(files.map((f, i) => f.name && f.name !== 'image.png' ? f : new File([f], `скриншот_${new Date().toLocaleTimeString('ru-RU').replace(/:/g, '-')}_${i + 1}.png`, { type: f.type })), S.tplDraft.side);
+  });
 
   // =====================================================================================================================
   // обработчики
