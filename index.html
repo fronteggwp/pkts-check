@@ -3619,7 +3619,7 @@ const DB = (() => {
   const tplPill = (map, k) => `<span class="pill ${(map[k] || ['', 'plain'])[1]}"><i></i>${esc((map[k] || [k])[0])}</span>`;
   const canTpl = () => !!S.me && S.me.role !== 'observer';
   const tplDev = () => isDev();
-  S.f.tpl = { q: '', who: null, st: 'all', view: 'tpls', rst: 'active', rtri: 'all', lim: 200 };
+  S.f.tpl = { q: '', who: null, type: 'all', st: 'all', view: 'tpls', rst: 'active', rtri: 'all', lim: 200 };
   S.tplSel = new Set();
 
   function tplLoadScript(src) {
@@ -3714,7 +3714,8 @@ const DB = (() => {
     const top = $('#tplTop'), bar = $('#tplBar'), tbl = $('#tplTbl');
     if (!top || !S.tpl) return;
     const T = S.tpl, f = S.f.tpl;
-    const scope = T.tpls.filter(tplMine);
+    const mineAll = T.tpls.filter(tplMine);
+    const scope = mineAll.filter(t => f.type === 'all' || t.kind_type === f.type);   // тип документа: паспорт, сводный, аналитический…
     const sums = new Map(scope.map(t => [t.code, tplSum(t)]));
     const secTotal = [...sums.values()].reduce((a, n) => a + n.total, 0), secOk = [...sums.values()].reduce((a, n) => a + n.ok, 0);
     const scopeCodes = new Set(scope.map(t => t.code));
@@ -3738,9 +3739,11 @@ const DB = (() => {
         <option value="mine" ${f.who === 'mine' ? 'selected' : ''}>Мои</option><option value="all" ${f.who === 'all' ? 'selected' : ''}>Все</option>
         <option value="none" ${f.who === 'none' ? 'selected' : ''}>Не назначены</option>
         ${users.map(u => `<option value="${esc(u.login)}" ${f.who === u.login ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}</select>`;
+    const types = [...new Set(T.tpls.map(t => t.kind_type).filter(Boolean))].sort((a, b) => mineAll.filter(t => t.kind_type === b).length - mineAll.filter(t => t.kind_type === a).length);
+    const typeSel = `<select class="input" data-act="tplType" style="width:auto"><option value="all">Все типы (${mineAll.length})</option>${types.map(x => `<option value="${esc(x)}" ${f.type === x ? 'selected' : ''}>${esc(x)} (${mineAll.filter(t => t.kind_type === x).length})</option>`).join('')}</select>`;
     const viewSeg = `<div class="seg"><button class="${f.view === 'tpls' ? 'on' : ''}" data-act="tplView" data-key="tpls">Шаблоны</button><button class="${f.view === 'rems' ? 'on' : ''}" data-act="tplView" data-key="rems">Замечания<span class="n">${rems.length}</span></button></div>`;
     bar.innerHTML = `<div class="toolbar"><div class="search">${I.search}<input class="input" id="q-tpl" data-act="tplq" placeholder="Код или название шаблона, раздел, алгоритм" value="${esc(f.q)}"><kbd class="hide-sm">/</kbd></div>
-      ${whoSel}${viewSeg}</div><div class="seg" id="tplModes" style="margin-bottom:12px"></div>`;
+      ${whoSel}${typeSel}${viewSeg}</div><div class="seg" id="tplModes" style="margin-bottom:12px"></div>`;
     if (f.view === 'rems') { renderTplRems(rems); return; }
     const cnt = st => [...sums.values()].filter(n => n.status === st).length;
     const mb = (key, label, cls, n) => `<button class="${f.st === key ? 'on' : ''}" data-act="tplSt" data-key="${key}">${cls ? `<span class="dot" style="background:var(--${cls})"></span>` : ''}${label}<span class="n">${n}</span></button>`;
@@ -3752,7 +3755,7 @@ const DB = (() => {
     const ord = { recheck: 0, issues: 1, work: 2, new: 3, done: 4 };
     const list = scope.filter(t => (f.st === 'all' || sums.get(t.code).status === f.st) && hit(t))
       .sort((a, b) => ord[sums.get(a.code).status] - ord[sums.get(b.code).status] || (sums.get(a.code).algBad - sums.get(b.code).algBad) || a.sort - b.sort);
-    if (!scope.length && f.who === 'mine') { tbl.innerHTML = '<div class="card"><div class="empty"><div class="ico">🗂</div>Вам ещё не назначены шаблоны — выберите «Все», чтобы посмотреть список</div></div>'; return; }
+    if (!mineAll.length && f.who === 'mine') { tbl.innerHTML = '<div class="card"><div class="empty"><div class="ico">🗂</div>Вам ещё не назначены шаблоны — выберите «Все», чтобы посмотреть список</div></div>'; return; }
     if (!list.length) { tbl.innerHTML = '<div class="card"><div class="empty"><div class="ico">🔎</div>Ничего не найдено</div></div>'; return; }
     const shown = list.slice(0, f.lim);
     const dev = tplDev();
@@ -4173,6 +4176,7 @@ const DB = (() => {
     const code = S.tplOpenCode;
     if (act === 'tplWho') { S.f.tpl.who = t.value; S.f.tpl.lim = 200; S.tplSel.clear(); renderTpl(); return; }
     if (act === 'tplRtri') { S.f.tpl.rtri = t.value; renderTpl(); return; }
+    if (act === 'tplType') { S.f.tpl.type = t.value; S.f.tpl.lim = 200; S.tplSel.clear(); renderTpl(); return; }
     if (act === 'tplSel') { if (t.checked) S.tplSel.add(t.dataset.code); else S.tplSel.delete(t.dataset.code); renderTpl(); return; }
     if (act === 'tplSelAll') { $$('input[data-act="tplSel"]').forEach(x => { if (t.checked) S.tplSel.add(x.dataset.code); else S.tplSel.delete(x.dataset.code); }); renderTpl(); return; }
     if (!canTpl()) return;
