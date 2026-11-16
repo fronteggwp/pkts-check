@@ -3726,7 +3726,8 @@ const DB = (() => {
     const relLine = L ? `Сборка <b>${esc(L.name)}</b>${L.built_at ? ' от ' + esc(fmtDT(L.built_at, true).slice(0, 10)) : ''} · ${L.deployed_at ? `<span style="color:var(--ok)">на сервере с ${fmtDT(L.deployed_at, true)}</span>` : `<span style="color:var(--int)">ещё не выложена на сервер</span>${D ? ` (на сервере ${esc(D.name)})` : ''}`}${L.note ? ` · <span class="muted">${esc(L.note)}</span>` : ''}` : 'Сборок ещё нет';
     top.innerHTML = `<div class="card deploy-card ${L && L.deployed_at ? 'calm' : ''}"><div class="txt">${relLine}</div>
         ${tplDev() ? `<div style="display:flex;gap:8px;flex-wrap:wrap">${L && !L.deployed_at ? `<button class="btn primary small" data-act="tplDeploy">${I.server}Залил ${esc(L.name)} на сервер</button>` : ''}
-          <button class="btn small" data-act="tplExport">${I.dl}Выгрузка замечаний</button></div>` : ''}</div>
+          <button class="btn small" data-act="tplExport">${I.dl}Выгрузка замечаний</button>
+          <button class="btn small" data-act="tplFilesToDb" title="Копии скриншотов и PDF замечаний в базу — для выгрузки скриптом (tools/tpl_export.py) без входа на сайт">${I.dl}Файлы в базу</button></div>` : ''}</div>
       <div class="kpis">
         ${kpi('Шаблонов', scope.length, f.who === 'mine' ? 'моих' : f.who === 'all' ? 'всего' : 'в выборке')}
         ${kpi('Принято', [...sums.values()].filter(n => n.status === 'done').length, 'шаблонов', 'var(--ok)')}
@@ -3924,8 +3925,43 @@ const DB = (() => {
       const path = `${remarkId}/${Date.now()}_${i}.${ext}`;
       const up = await sb.storage.from('tpl-files').upload(path, file, { contentType: file.type, upsert: false });
       if (up.error) throw new Error('файл ' + (file.name || '') + ': ' + up.error.message);
-      tplChk(await sb.from('tpl_files').insert({ remark_id: remarkId, path, name: file.name || `скриншот_${i + 1}.${ext}`, size: file.size, mime: file.type, side, by_login: S.me.login }));
+      const rec = tplChk(await sb.from('tpl_files').insert({ remark_id: remarkId, path, name: file.name || `скриншот_${i + 1}.${ext}`, size: file.size, mime: file.type, side, by_login: S.me.login }).select('id'));
+      // копия файла в базе (tpl_file_data) — для выгрузки замечаний скриптом без входа на сайт; сбой копии загрузку не ломает
+      try { if (rec && rec[0]) await tplFileToDb(rec[0].id, file); } catch (e) { console.warn('копия файла в базу:', e); }
     }
+  }
+  // байты файла -> bytea (hex '\x…') в tpl_file_data
+  async function tplFileToDb(fileId, blob) {
+    const b = new Uint8Array(await blob.arrayBuffer());
+    const hex = new Array(b.length);
+    for (let i = 0; i < b.length; i++) hex[i] = (b[i] < 16 ? '0' : '') + b[i].toString(16);
+    tplChk(await tplSb().from('tpl_file_data').insert({ file_id: fileId, data: '\\x' + hex.join('') }));
+  }
+  // разработчик: копии уже загруженных файлов (из хранилища tpl-files) в базу — один раз; дальше сайт копирует сам при загрузке
+  async function tplFilesToDb(btn) {
+    const sb = tplSb();
+    btn.disabled = true; const label = btn.innerHTML; btn.innerHTML = '<span class="spin"></span>';
+    try {
+      const files = [], have = new Set();
+      for (let from = 0; ; from += 1000) {
+        const part = tplChk(await sb.from('tpl_files').select('id,path').order('id').range(from, from + 999));
+        files.push(...part); if (part.length < 1000) break;
+      }
+      for (let from = 0; ; from += 1000) {
+        const part = tplChk(await sb.from('tpl_file_data').select('file_id').order('file_id').range(from, from + 999));
+        part.forEach(x => have.add(x.file_id)); if (part.length < 1000) break;
+      }
+      const todo = files.filter(f => !have.has(f.id));
+      let ok = 0, bad = 0;
+      for (const f of todo) {
+        const d = await sb.storage.from('tpl-files').download(f.path);
+        if (d.error) { bad++; continue; }
+        try { await tplFileToDb(f.id, d.data); ok++; } catch (e) { bad++; console.warn('файл', f.id, e); }
+        btn.innerHTML = `<span class="spin"></span> ${ok + bad}/${todo.length}`;
+      }
+      toast(todo.length ? `Скопировано в базу: ${ok}${bad ? `, не удалось: ${bad}` : ''} (уже было: ${have.size})` : `Все файлы уже в базе (${have.size})`, bad > 0);
+    } catch (e) { toast(e.message || String(e), true); }
+    btn.disabled = false; btn.innerHTML = label;
   }
   async function tplCreate(btn) {
     const d = S.tplDraft;
@@ -4154,6 +4190,7 @@ const DB = (() => {
       }
       case 'tplExport': tplExportDlg(); break;
       case 'tplExportGo': await tplExportGo(t); break;
+      case 'tplFilesToDb': await tplFilesToDb(t); break;
       case 'tplAssign': case 'tplAssignFree': {
         const to = ($('#tplAssignTo') || {}).value;
         if (!to) { toast('Выберите исполнителя', true); break; }
