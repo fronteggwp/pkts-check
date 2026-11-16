@@ -3654,7 +3654,30 @@ const DB = (() => {
     try { T.alg = new Map(healthStats().map(x => [x.name.toLowerCase(), x.st])); } catch { T.alg = new Map(); }
     S.tpl = T;
     if (S.f.tpl.who == null) S.f.tpl.who = tplDev() ? 'all' : 'mine';
+    tplAutoCopy(files); // фоном, не ждём
     return T;
+  }
+  // [16.11] страховка копий файлов в базе: если при загрузке копия не сделалась (старая страница в кэше, обрыв), её доделает
+  // любой, кто может писать замечания, при открытии «Шаблонов» — фоном, не чаще раза в 10 минут; кнопка «Файлы в базу» не нужна
+  let tplCopyAt = 0;
+  async function tplAutoCopy(files) {
+    if (!canTpl() || !files || !files.length || Date.now() - tplCopyAt < 10 * 60 * 1000) return;
+    tplCopyAt = Date.now();
+    try {
+      const sb = tplSb(), have = new Set();
+      for (let from = 0; ; from += 1000) {
+        const part = tplChk(await sb.from('tpl_file_data').select('file_id').order('file_id').range(from, from + 999));
+        part.forEach(x => have.add(x.file_id)); if (part.length < 1000) break;
+      }
+      const todo = files.filter(f => !have.has(f.id)).map(f => f.id);
+      for (let i = 0; i < todo.length; i += 100) {
+        for (const f of tplChk(await sb.from('tpl_files').select('id,path').in('id', todo.slice(i, i + 100)))) {
+          const d = await sb.storage.from('tpl-files').download(f.path);
+          if (d.error) continue;
+          try { await tplFileToDb(f.id, d.data); } catch (e) { console.warn('копия файла в базу', f.id, e); }
+        }
+      }
+    } catch (e) { console.warn('копии файлов в базу:', e); }
   }
   async function tplReload(keepModal) {
     await safe(tplLoad);
@@ -3935,7 +3958,8 @@ const DB = (() => {
     const b = new Uint8Array(await blob.arrayBuffer());
     const hex = new Array(b.length);
     for (let i = 0; i < b.length; i++) hex[i] = (b[i] < 16 ? '0' : '') + b[i].toString(16);
-    tplChk(await tplSb().from('tpl_file_data').insert({ file_id: fileId, data: '\\x' + hex.join('') }));
+    // ON CONFLICT DO NOTHING: копию мог уже сделать другой пользователь (страховка при открытии раздела)
+    tplChk(await tplSb().from('tpl_file_data').upsert({ file_id: fileId, data: '\\x' + hex.join('') }, { onConflict: 'file_id', ignoreDuplicates: true }));
   }
   // разработчик: копии уже загруженных файлов (из хранилища tpl-files) в базу — один раз; дальше сайт копирует сам при загрузке
   async function tplFilesToDb(btn) {
