@@ -3639,6 +3639,9 @@ const DB = (() => {
       pg(() => sb.from('tpl_remarks').select('*').order('id')),
       pg(() => sb.from('tpl_files').select('id,remark_id').order('id')),
     ]);
+    // 23.11: только шаблоны в проверке (active): разделы, отметки и замечания скрытых шаблонов не показываем
+    const __act = new Set(tpls.map(t => t.code));
+    for (const a of [secs, marks, rems]) { const k = a.filter(x => __act.has(x.tpl_code)); a.length = 0; a.push(...k); }
     const T = { rel, relById: new Map(rel.map(r => [r.id, r])), tpls, byCode: new Map(tpls.map(t => [t.code, t])), secs: new Map(), marks: new Map(),
       rems, remById: new Map(rems.map(r => [r.id, r])), remByTpl: new Map(), remBySec: new Map(), files: new Map() };
     secs.forEach(s => { let l = T.secs.get(s.tpl_code); if (!l) T.secs.set(s.tpl_code, l = []); l.push(s); });
