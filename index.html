@@ -3764,13 +3764,16 @@ const DB = (() => {
     const users = tplTeam();
     const whoSel = `<select class="input" data-act="tplWho" style="width:auto">
         <option value="mine" ${f.who === 'mine' ? 'selected' : ''}>Мои</option><option value="all" ${f.who === 'all' ? 'selected' : ''}>Все</option>
-        <option value="none" ${f.who === 'none' ? 'selected' : ''}>Не назначены</option>
+        <option value="none" ${f.who === 'none' ? 'selected' : ''}>Свободные (${T.tpls.filter(x => !x.assignee).length})</option>
         ${users.map(u => `<option value="${esc(u.login)}" ${f.who === u.login ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}</select>`;
     const types = [...new Set(T.tpls.map(t => t.kind_type).filter(Boolean))].sort((a, b) => mineAll.filter(t => t.kind_type === b).length - mineAll.filter(t => t.kind_type === a).length);
     const typeSel = `<select class="input" data-act="tplType" style="width:auto"><option value="all">Все типы (${mineAll.length})</option>${types.map(x => `<option value="${esc(x)}" ${f.type === x ? 'selected' : ''}>${esc(x)} (${mineAll.filter(t => t.kind_type === x).length})</option>`).join('')}</select>`;
     const viewSeg = `<div class="seg"><button class="${f.view === 'tpls' ? 'on' : ''}" data-act="tplView" data-key="tpls">Шаблоны</button><button class="${f.view === 'rems' ? 'on' : ''}" data-act="tplView" data-key="rems">Замечания<span class="n">${rems.length}</span></button></div>`;
+    // [25.11] проверяющие сами берут свободные шаблоны (без исполнителя): кнопка «Взять себе» закрепляет шаблон за человеком
+    const freeN = T.tpls.filter(x => !x.assignee).length;
+    const takeBtn = !tplDev() && canTpl() && f.who !== 'none' && freeN ? `<button class="btn small" data-act="tplWhoFree" title="Шаблоны без исполнителя — выберите и нажмите «Взять себе»">Взять шаблон <span class="faint">(свободных ${freeN})</span></button>` : '';
     bar.innerHTML = `<div class="toolbar"><div class="search">${I.search}<input class="input" id="q-tpl" data-act="tplq" placeholder="Код или название шаблона, раздел, алгоритм" value="${esc(f.q)}"><kbd class="hide-sm">/</kbd></div>
-      ${whoSel}${typeSel}${viewSeg}</div><div class="seg" id="tplModes" style="margin-bottom:12px"></div>`;
+      ${whoSel}${typeSel}${viewSeg}${takeBtn}</div><div class="seg" id="tplModes" style="margin-bottom:12px"></div>`;
     if (f.view === 'rems') { renderTplRems(rems); return; }
     const cnt = st => [...sums.values()].filter(n => n.status === st).length;
     const mb = (key, label, cls, n) => `<button class="${f.st === key ? 'on' : ''}" data-act="tplSt" data-key="${key}">${cls ? `<span class="dot" style="background:var(--${cls})"></span>` : ''}${label}<span class="n">${n}</span></button>`;
@@ -3782,14 +3785,15 @@ const DB = (() => {
     const ord = { recheck: 0, issues: 1, work: 2, new: 3, done: 4 };
     const list = scope.filter(t => (f.st === 'all' || sums.get(t.code).status === f.st) && hit(t))
       .sort((a, b) => ord[sums.get(a.code).status] - ord[sums.get(b.code).status] || (sums.get(a.code).algBad - sums.get(b.code).algBad) || a.sort - b.sort);
-    if (!mineAll.length && f.who === 'mine') { tbl.innerHTML = '<div class="card"><div class="empty"><div class="ico">🗂</div>Вам ещё не назначены шаблоны — выберите «Все», чтобы посмотреть список</div></div>'; return; }
+    if (!mineAll.length && f.who === 'mine') { tbl.innerHTML = `<div class="card"><div class="empty"><div class="ico">🗂</div>За вами пока нет шаблонов${freeN && canTpl() ? `<div style="margin-top:10px"><button class="btn primary small" data-act="tplWhoFree">Выбрать из свободных (${freeN})</button></div><div class="faint" style="margin-top:6px;font-size:12.5px">Нажмите «Взять себе» у шаблона — он закрепится за вами и появится в «Мои»</div>` : ' — выберите «Все», чтобы посмотреть список'}</div></div>`; return; }
     if (!list.length) { tbl.innerHTML = '<div class="card"><div class="empty"><div class="ico">🔎</div>Ничего не найдено</div></div>'; return; }
     const shown = list.slice(0, f.lim);
     const dev = tplDev();
     const assignBar = dev ? `<div class="toolbar" style="margin:0 0 10px"><span class="muted">Выбрано: <b>${S.tplSel.size}</b></span>
         <select class="input" id="tplAssignTo" style="width:auto"><option value="">— исполнитель —</option>${users.map(u => `<option value="${esc(u.login)}">${esc(u.name)}</option>`).join('')}<option value="-">снять исполнителя</option></select>
         <button class="btn small" data-act="tplAssign">Назначить выбранные</button>
-        <button class="btn small" data-act="tplAssignFree" title="Всем шаблонам без исполнителя">Назначить всем без исполнителя</button></div>` : '';
+        <button class="btn small" data-act="tplAssignFree" title="Всем шаблонам без исполнителя">Назначить всем без исполнителя</button></div>`
+      : f.who === 'none' && canTpl() ? '<div class="muted" style="margin:0 0 10px;font-size:13px">Свободные шаблоны — без исполнителя. «Взять себе» закрепляет шаблон за вами: он появится в «Мои», у других пропадёт из свободных.</div>' : '';
     tbl.innerHTML = assignBar + `<div class="card table-wrap"><table class="t"><thead><tr>
         ${dev ? `<th class="nosort" style="width:28px"><input type="checkbox" data-act="tplSelAll" ${shown.length && shown.every(t => S.tplSel.has(t.code)) ? 'checked' : ''}></th>` : ''}
         <th class="nosort">Шаблон</th><th class="nosort">Разделы</th><th class="nosort">Замечания</th><th class="nosort">Данные</th><th class="nosort">Исполнитель</th><th class="nosort">Статус</th></tr></thead>
@@ -3799,7 +3803,7 @@ const DB = (() => {
         <td data-l="Разделы"><div class="tpl-prog"><i style="width:${pct}%"></i></div><span class="faint" style="font-size:12px">${n.ok} / ${n.total}${n.skip ? ` · пустых ${n.skip}` : ''}</span></td>
         <td data-l="Замечания">${n.open ? `<span class="errn">${n.open}</span>` : ''}${n.rech ? ` <span class="pill interrupted" style="padding:1px 8px">${n.rech} перепр.</span>` : ''}${!n.open && !n.rech ? '<span class="faint">—</span>' : ''}</td>
         <td data-l="Данные">${n.algBad ? `<span class="pill errors" title="алгоритмы разделов с ошибками — данные могут быть неверны не из-за шаблона" style="padding:1px 8px">алг. с ошибками: ${n.algBad}</span>` : '<span class="faint">—</span>'}</td>
-        <td data-l="Исполнитель">${who(t.assignee)}</td>
+        <td data-l="Исполнитель">${!t.assignee && !dev && canTpl() ? `<button class="btn small primary" data-act="tplTake" data-code="${esc(t.code)}">Взять себе</button>` : who(t.assignee)}</td>
         <td data-l="Статус">${tplPill(TPL_ST, n.status)}</td></tr>`; }).join('')}</tbody></table></div>
       ${list.length > shown.length ? `<div style="text-align:center;margin:12px 0"><button class="btn" data-act="tplMore">Показать ещё (${list.length - shown.length})</button></div>` : `<div class="faint" style="text-align:center;margin:10px 0;font-size:12.5px">${list.length} ${plural(list.length, 'шаблон', 'шаблона', 'шаблонов')}</div>`}`;
   }
@@ -3856,7 +3860,9 @@ const DB = (() => {
         <div class="mg"><div class="l">Статус</div><div class="v">${tplPill(TPL_ST, n.status)}</div></div>
         <div class="mg"><div class="l">Тип</div><div class="v" style="font-size:13px">${esc(t.kind_type || '—')}</div></div>
         <div class="mg"><div class="l">Разделов проверено</div><div class="v">${n.ok} / ${n.total}</div></div>
-        <div class="mg"><div class="l">Исполнитель</div><div class="v" style="font-size:13px">${dev ? `<select class="input" data-act="tplAssignOne" style="padding:3px 6px"><option value="">не назначен</option>${tplTeam().map(u => `<option value="${esc(u.login)}" ${t.assignee === u.login ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}</select>` : who(t.assignee)}</div></div>
+        <div class="mg"><div class="l">Исполнитель</div><div class="v" style="font-size:13px">${dev ? `<select class="input" data-act="tplAssignOne" style="padding:3px 6px"><option value="">не назначен</option>${tplTeam().map(u => `<option value="${esc(u.login)}" ${t.assignee === u.login ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}</select>`
+          : !t.assignee && can ? `<button class="btn small primary" data-act="tplTake" data-code="${esc(t.code)}">Взять себе</button>`
+          : `${who(t.assignee)}${can && t.assignee === S.me.login && n.status === 'new' ? ` <button class="btn small ghost" data-act="tplRelease" title="Пока по шаблону ничего не отмечено, его можно вернуть — возьмёт кто-то другой">вернуть в свободные</button>` : ''}`}</div></div>
       </div>
       <div class="section" style="margin-top:0"><h4>Документ для проверки</h4>
         <div class="muted" style="font-size:13px;margin-bottom:6px">Сформируйте печатную форму этого документа в 2.0 и в 1.0 и сравните.${k && k.guid ? ` Документ первого этапа перепроверки: <span class="mono">${esc(k.guid)}</span>${k.ps ? ` · ${esc(psLabel(k.ps))}` : ''}` : ''}</div>
@@ -4133,7 +4139,7 @@ const DB = (() => {
     const act = t && t.dataset.act;
     if (!act || !act.startsWith('tpl') || !S.tpl) return;
     if (t.tagName === 'A') e.preventDefault();
-    const write = !['tplOpen', 'tplRem', 'tplView', 'tplSt', 'tplRst', 'tplMore', 'tplBackTo', 'tplBack', 'tplExport', 'tplExportGo', 'tplSelAll', 'tplSel', 'tplZone'].includes(act);
+    const write = !['tplOpen', 'tplRem', 'tplView', 'tplSt', 'tplRst', 'tplMore', 'tplBackTo', 'tplBack', 'tplExport', 'tplExportGo', 'tplSelAll', 'tplSel', 'tplZone', 'tplWhoFree'].includes(act);
     if (write && !canTpl()) { toast('Наблюдатель только просматривает', true); return; }
     const code = S.tplOpenCode;
     switch (act) {
@@ -4142,6 +4148,31 @@ const DB = (() => {
       case 'tplSt': S.f.tpl.st = t.dataset.key; S.f.tpl.lim = 200; renderTpl(); break;
       case 'tplRst': S.f.tpl.rst = t.dataset.key; renderTpl(); break;
       case 'tplMore': S.f.tpl.lim += 200; renderTpl(); break;
+      case 'tplWhoFree': S.f.tpl.who = 'none'; S.f.tpl.st = 'all'; S.f.tpl.lim = 200; renderTpl(); break;
+      case 'tplTake': {   // [25.11] взять свободный шаблон себе; занятый кем-то за это время не перехватывается
+        const c = t.dataset.code || code;
+        const ok = await safe(async () => {
+          const r = tplChk(await tplSb().from('tpl_templates').update({ assignee: S.me.login }).eq('code', c).is('assignee', null).select('code'));
+          if (!r || !r.length) throw new Error(`Шаблон ${c} уже взял другой человек`);
+          S.tpl.byCode.get(c).assignee = S.me.login;
+          return true;
+        }, `Шаблон ${c} теперь ваш — он в «Мои»`);
+        if (!ok) await tplReload();
+        else { renderTpl(); renderShell(); }
+        tplRefreshCard();
+        break;
+      }
+      case 'tplRelease': {   // [25.11] вернуть в свободные свой шаблон, по которому ещё ничего не отмечено
+        const c = code;
+        if (!confirm(`Вернуть шаблон ${c} в свободные? Его сможет взять другой человек.`)) break;
+        const ok = await safe(async () => {
+          tplChk(await tplSb().from('tpl_templates').update({ assignee: null }).eq('code', c).eq('assignee', S.me.login));
+          S.tpl.byCode.get(c).assignee = null;
+          return true;
+        }, `Шаблон ${c} возвращён в свободные`);
+        if (ok) { renderTpl(); renderShell(); tplRefreshCard(); }
+        break;
+      }
       case 'tplMark': await safe(() => tplMark(code, [t.dataset.sec], true)); break;
       case 'tplUnmark': await safe(() => tplMark(code, [t.dataset.sec], false)); break;
       case 'tplMarkAll': {
