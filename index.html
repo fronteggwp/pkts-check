@@ -3690,7 +3690,8 @@ const DB = (() => {
   }
 
   function remState(r) {
-    if (r.state === 'fixed') { const rel = S.tpl.relById.get(r.fixed_release); return rel && rel.deployed_at ? 'recheck' : 'fixed'; }
+    // [27.11] сборки накопительные: «исправлено в vN» уходит на перепроверку, когда на сервере vN или любая более поздняя сборка
+    if (r.state === 'fixed') { const d = S.tpl.deployed; return d && r.fixed_release != null && d.id >= r.fixed_release ? 'recheck' : 'fixed'; }
     return r.state;
   }
   const remActive = st => st === 'open' || st === 'fixed' || st === 'recheck';
@@ -4235,7 +4236,7 @@ const DB = (() => {
       }
       case 'tplDeploy': {
         const L = S.tpl.latest;
-        modal('Сборка выложена на сервер', `<div>Отметить, что сборка <b>${esc(L.name)}</b> залита на сервер?</div><div class="muted" style="margin-top:8px">Замечания, исправленные в ${esc(L.name)}, уйдут тестировщицам на перепроверку.</div>`,
+        modal('Сборка выложена на сервер', `<div>Отметить, что сборка <b>${esc(L.name)}</b> залита на сервер?</div><div class="muted" style="margin-top:8px">Замечания, исправленные в ${esc(L.name)} и в прошлых сборках, которые на сервер не выкладывались, уйдут тестировщицам на перепроверку${(() => { const d = S.tpl.deployed, n = S.tpl.rems.filter(r => r.state === 'fixed' && r.fixed_release != null && r.fixed_release <= L.id && !(d && d.id >= r.fixed_release)).length; return n ? ` (${n})` : ''; })()}.</div>`,
           `<button class="btn" data-act="closeModal">Отмена</button><button class="btn primary" data-act="tplDeployGo">Да, залил</button>`);
         break;
       }
